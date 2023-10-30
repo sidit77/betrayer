@@ -1,5 +1,7 @@
-use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
-use windows::Win32::UI::WindowsAndMessaging::{DispatchMessageW, GetMessageW, MSG, PostMessageW, TranslateMessage, WM_QUIT};
+use log::LevelFilter;
+use simple_logger::SimpleLogger;
+use winit::event::Event;
+use winit::event_loop::{ControlFlow, EventLoopBuilder};
 use betrayer::{Menu, MenuItem, TrayEvent, TrayIconBuilder};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -10,7 +12,17 @@ enum Signal {
 }
 
 fn main() {
-    let tray = TrayIconBuilder::new()
+    SimpleLogger::new()
+        .with_level(LevelFilter::Trace)
+        .init()
+        .unwrap();
+
+    let event_loop = EventLoopBuilder::with_user_event()
+        .build()
+        .unwrap();
+
+    let proxy = event_loop.create_proxy();
+    let _tray = TrayIconBuilder::new()
         .with_menu(Menu::new([
             MenuItem::menu("Profiles", [
                 MenuItem::button("Music", Signal::Profile(0)),
@@ -20,18 +32,18 @@ fn main() {
             MenuItem::button("Open", Signal::Open),
             MenuItem::button("Quit", Signal::Quit)
         ]))
-        .build(|s| {
-            println!("Clicked: {:?}", s);
-            if s == TrayEvent::Menu(Signal::Quit) {
-                unsafe { PostMessageW(HWND::default(), WM_QUIT, WPARAM::default(), LPARAM::default()).unwrap(); }
-            }
-        });
+        .build(move |s| {let _ = proxy.send_event(s); });
 
-    unsafe {
-        let mut msg: MSG = MSG::default();
-        while GetMessageW(&mut msg, HWND::default(), 0, 0).as_bool() {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
+    event_loop.set_control_flow(ControlFlow::Wait);
+    event_loop.run(|event, evtl| {
+        match event {
+            Event::UserEvent(TrayEvent::Menu(signal)) => {
+                log::info!("Signal: {:?}", signal);
+                if signal == Signal::Quit {
+                    evtl.exit();
+                }
+            }
+            _ => {}
         }
-    }
+    }).unwrap();
 }
