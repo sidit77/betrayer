@@ -1,3 +1,6 @@
+use crate::platform::NativeTrayIcon;
+
+mod platform;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct TrayIconBuilder<T> {
@@ -21,15 +24,15 @@ impl<T> TrayIconBuilder<T> {
 
 impl<T: Clone> TrayIconBuilder<T> {
 
-    pub fn build<F>(self, _callback: F) -> TrayIcon
+    pub fn build<F>(self, callback: F) -> TrayIcon
         where F: FnMut(T) + Send + 'static
     {
-        TrayIcon
+        TrayIcon(NativeTrayIcon::new(self, callback))
     }
 
 }
 
-pub struct TrayIcon;
+pub struct TrayIcon(NativeTrayIcon);
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Menu<T> {
