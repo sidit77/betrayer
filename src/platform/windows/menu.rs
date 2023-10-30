@@ -1,7 +1,9 @@
 use std::any::Any;
-use windows::core::{PCWSTR, Result};
-use windows::Win32::UI::WindowsAndMessaging::{AppendMenuW, CreatePopupMenu, DestroyMenu, HMENU, MF_POPUP, MF_SEPARATOR, MF_STRING};
+use windows::core::PCWSTR;
+use windows::Win32::Foundation::{HWND, POINT};
+use windows::Win32::UI::WindowsAndMessaging::{AppendMenuW, CreatePopupMenu, DestroyMenu, GetCursorPos, HMENU, MF_POPUP, MF_SEPARATOR, MF_STRING, SetForegroundWindow, TPM_BOTTOMALIGN, TPM_LEFTALIGN, TrackPopupMenu};
 use crate::{Menu, MenuItem};
+use crate::error::{TrayError, TrayResult};
 use crate::platform::windows::encode_wide;
 
 pub struct NativeMenu {
@@ -10,29 +12,15 @@ pub struct NativeMenu {
 }
 
 impl NativeMenu {
-/*
-    pub fn new() -> Result<Self> {
+
+    pub fn show_on_cursor(&self, hwnd: HWND) -> TrayResult<()> {
+        let mut cursor = POINT::default();
         unsafe {
-            let hmenu = CreatePopupMenu()?;
-
-            let submenu = CreatePopupMenu()?;
-
-            AppendMenuW(submenu, MF_STRING, 39, w!("Profile 1")).unwrap();
-
-            AppendMenuW(hmenu, MF_POPUP, submenu.0 as _, w!("Profiles")).unwrap();
-            AppendMenuW(hmenu, MF_SEPARATOR, 0, None).unwrap();
-            AppendMenuW(hmenu, MF_STRING, 41, w!("Open")).unwrap();
-            AppendMenuW(hmenu, MF_STRING, 42, w!("Quit")).unwrap();
-
-            Ok(Self {
-                hmenu
-            })
+            GetCursorPos(&mut cursor)?;
+            SetForegroundWindow(hwnd).ok()?;
+            TrackPopupMenu(self.hmenu, TPM_BOTTOMALIGN | TPM_LEFTALIGN, cursor.x, cursor.y, 0, hwnd, None)?;
         }
-    }
-
- */
-    pub fn hmenu(&self) -> HMENU {
-        self.hmenu
+        Ok(())
     }
 
     pub fn map(&self, id: u16) -> Option<&dyn Any> {
@@ -43,14 +31,15 @@ impl NativeMenu {
 
 impl Drop for NativeMenu {
     fn drop(&mut self) {
-        println!("dropping menu");
+        log::trace!("Destroying native menu");
         unsafe {
-            DestroyMenu(self.hmenu).unwrap();
+            DestroyMenu(self.hmenu)
+                .unwrap_or_else(|err| log::warn!("Failed to destroy native menu: {err}"));
         }
     }
 }
 
-fn add_all<T>(hmenu: HMENU, signals: &mut Vec<T>, items: Vec<MenuItem<T>>) -> Result<()> {
+fn add_all<T>(hmenu: HMENU, signals: &mut Vec<T>, items: Vec<MenuItem<T>>) -> TrayResult<()> {
     for item in items {
         match item {
             MenuItem::Separator => {
@@ -73,9 +62,10 @@ fn add_all<T>(hmenu: HMENU, signals: &mut Vec<T>, items: Vec<MenuItem<T>>) -> Re
 }
 
 impl<T: 'static> TryFrom<Menu<T>> for NativeMenu {
-    type Error = windows::core::Error;
+    type Error = TrayError;
 
-    fn try_from(value: Menu<T>) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: Menu<T>) -> Result<Self, Self::Error> {
+        log::trace!("Creating new native menu");
         let hmenu = unsafe { CreatePopupMenu()? };
         let mut signals = Vec::<T>::new();
         add_all(hmenu, &mut signals, value.items)?;

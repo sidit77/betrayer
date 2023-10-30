@@ -2,6 +2,7 @@ use log::LevelFilter;
 use simple_logger::SimpleLogger;
 use winit::event::Event;
 use winit::event_loop::{ControlFlow, EventLoopBuilder};
+use anyhow::Result;
 use betrayer::{Menu, MenuItem, TrayEvent, TrayIconBuilder};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -11,15 +12,13 @@ enum Signal {
     Quit
 }
 
-fn main() {
+fn main() -> Result<()> {
     SimpleLogger::new()
         .with_level(LevelFilter::Trace)
-        .init()
-        .unwrap();
+        .init()?;
 
     let event_loop = EventLoopBuilder::with_user_event()
-        .build()
-        .unwrap();
+        .build()?;
 
     let proxy = event_loop.create_proxy();
     let _tray = TrayIconBuilder::new()
@@ -45,5 +44,6 @@ fn main() {
             }
             _ => {}
         }
-    }).unwrap();
+    })?;
+    Ok(())
 }

@@ -1,9 +1,11 @@
+use crate::error::TrayResult;
 use crate::platform::NativeTrayIcon;
 
 mod platform;
+mod error;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct TrayIconBuilder<T> {
+pub struct TrayIconBuilder<T = ()> {
     menu: Option<Menu<T>>
 }
 
@@ -24,10 +26,10 @@ impl<T> TrayIconBuilder<T> {
 
 impl<T: Clone + 'static> TrayIconBuilder<T> {
 
-    pub fn build<F>(self, callback: F) -> TrayIcon
+    pub fn build<F>(self, callback: F) -> TrayResult<TrayIcon>
         where F: FnMut(TrayEvent<T>) + Send + 'static
     {
-        TrayIcon(NativeTrayIcon::new(self, callback))
+        Ok(TrayIcon(NativeTrayIcon::new(self, callback)?))
     }
 
 }

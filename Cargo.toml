@@ -31,3 +31,4 @@ objc2 = "0.4"
 [dev-dependencies]
 winit = "0.29"
 simple_logger = { version = "4", default-features = false }
+anyhow = "1"

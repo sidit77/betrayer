@@ -7,12 +7,13 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Once;
 use once_cell::sync::Lazy;
 use windows::core::{PCWSTR, w};
-use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
+use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::SystemServices::IMAGE_DOS_HEADER;
 use windows::Win32::UI::Shell::{DefSubclassProc, NIF_ICON, NIF_MESSAGE, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW, SetWindowSubclass, Shell_NotifyIconW};
-use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, DefWindowProcW, DestroyWindow, GetCursorPos, HMENU, HWND_MESSAGE, IDI_QUESTION, LoadIconW, RegisterClassW, RegisterWindowMessageW, SetForegroundWindow, TPM_BOTTOMALIGN, TPM_LEFTALIGN, TrackPopupMenu, WINDOW_EX_STYLE, WINDOW_STYLE, WM_COMMAND, WM_DESTROY, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW};
+use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, DefWindowProcW, DestroyWindow, HMENU, HWND_MESSAGE, IDI_QUESTION, LoadIconW, RegisterClassW, RegisterWindowMessageW, WINDOW_EX_STYLE, WINDOW_STYLE, WM_COMMAND, WM_DESTROY, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW};
 use crate::platform::windows::menu::NativeMenu;
-use crate::{ClickType, TrayEvent, TrayIconBuilder};
+use crate::{ClickType, ensure, TrayEvent, TrayIconBuilder};
+use crate::error::{ErrorSource, TrayError, TrayResult};
 
 const TRAY_SUBCLASS_ID: usize = 6001;
 const WM_USER_TRAY_ICON: u32 = 6002;
@@ -24,10 +25,11 @@ pub struct NativeTrayIcon {
 
 impl NativeTrayIcon {
 
-    pub fn new<T, F>(builder: TrayIconBuilder<T>, mut callback: F) -> Self
+    pub fn new<T, F>(builder: TrayIconBuilder<T>, mut callback: F) -> TrayResult<Self>
         where F: FnMut(TrayEvent<T>) + Send + 'static,
               T: Clone + 'static
     {
+        let tray_id = GLOBAL_TRAY_COUNTER.fetch_add(1, Ordering::Relaxed);
 
         let hwnd = unsafe {
             CreateWindowExW(
@@ -43,11 +45,11 @@ impl NativeTrayIcon {
                 None
             )
         };
-        assert_ne!(hwnd, HWND::default());
+        ensure!(hwnd != HWND::default(), TrayError::custom("Invalid HWND"));
+        log::trace!("Created new message window (tray id: {tray_id})");
 
-        let icon = unsafe { LoadIconW(None, IDI_QUESTION).unwrap() };
+        let icon = unsafe { LoadIconW(None, IDI_QUESTION)? };
 
-        let tray_id = GLOBAL_TRAY_COUNTER.fetch_add(1, Ordering::Relaxed);
         let notify_icon_data = NOTIFYICONDATAW {
             cbSize: size_of::<NOTIFYICONDATAW>() as u32,
             uFlags: NIF_MESSAGE | NIF_ICON/* | NIF_TIP*/,
@@ -59,19 +61,18 @@ impl NativeTrayIcon {
             ..Default::default()
         };
 
-        unsafe { Shell_NotifyIconW(NIM_ADD, &notify_icon_data).ok().unwrap() };
+        unsafe { Shell_NotifyIconW(NIM_ADD, &notify_icon_data).ok()? };
 
         let menu = builder
             .menu
             .map(NativeMenu::try_from)
-            .transpose()
-            .unwrap();
+            .transpose()?;
 
         let erased_callback: Box<dyn FnMut(TrayEvent<&dyn Any>) + 'static> = Box::new(move |event: TrayEvent<&dyn Any> | {
             let event = match event {
                 TrayEvent::Menu(signal) => TrayEvent::Menu(signal
                     .downcast_ref::<T>()
-                    .expect("")
+                    .expect("Signal has the wrong type")
                     .clone()),
                 TrayEvent::Tray(click) => TrayEvent::Tray(click)
             };
@@ -89,13 +90,13 @@ impl NativeTrayIcon {
                 Some(tray_subclass_proc),
                 TRAY_SUBCLASS_ID,
                 Box::into_raw(Box::new(data)) as _)
-                .ok().unwrap();
+                .ok()?;
         }
 
-        NativeTrayIcon {
+        Ok(NativeTrayIcon {
             hwnd,
             tray_id,
-        }
+        })
 
     }
 
@@ -103,6 +104,7 @@ impl NativeTrayIcon {
 
 impl Drop for NativeTrayIcon {
     fn drop(&mut self) {
+        log::trace!("Destroying message window (tray id: {})", self.tray_id);
         let notify_icon_data = NOTIFYICONDATAW {
             cbSize: size_of::<NOTIFYICONDATAW>() as u32,
             hWnd: self.hwnd,
@@ -111,8 +113,11 @@ impl Drop for NativeTrayIcon {
         };
 
         unsafe {
-            Shell_NotifyIconW(NIM_DELETE, &notify_icon_data).ok().unwrap();
-            DestroyWindow(self.hwnd).unwrap();
+            Shell_NotifyIconW(NIM_DELETE, &notify_icon_data)
+                .ok()
+                .unwrap_or_else(|err| log::warn!("Failed to remove tray icon: {err}"));
+            DestroyWindow(self.hwnd)
+                .unwrap_or_else(|err| log::warn!("Failed to destroy message window: {err}"));
         };
     }
 }
@@ -136,41 +141,27 @@ impl ClickType {
 unsafe extern "system" fn tray_subclass_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM, _id: usize, subclass_input_ptr: usize) -> LRESULT {
     let subclass_input_ptr = subclass_input_ptr as *mut TrayData;
     let subclass_input = &mut *subclass_input_ptr;
-    //println!("msg: {}", msg);
     match msg {
         WM_DESTROY => {
             drop(Box::from_raw(subclass_input_ptr));
-            println!("Destroyed");
+            log::trace!("Dropped message loop data");
         },
-        _ if msg == *S_U_TASKBAR_RESTART => println!("Taskbar restarted"),
+        _ if msg == *S_U_TASKBAR_RESTART => log::debug!("Taskbar restarted"),
         WM_USER_TRAY_ICON => if let Some(click) = ClickType::from_lparam(lparam) {
             (subclass_input.callback)(TrayEvent::Tray(click));
-            if click == ClickType::Right {
-                if let Some(menu) =  subclass_input.menu.as_ref() {
-                    let mut cursor = POINT::default();
-                    GetCursorPos(&mut cursor).unwrap();
-                    SetForegroundWindow(hwnd).unwrap();
-                    let hmenu = menu.hmenu();
-                    TrackPopupMenu(
-                        hmenu,
-                        TPM_BOTTOMALIGN | TPM_LEFTALIGN,
-                        cursor.x, cursor.y,
-                        0,
-                        hwnd,
-                        None
-                    ).unwrap();
-                }
-            }
+            (click == ClickType::Right)
+                .then_some(subclass_input.menu.as_ref())
+                .flatten()
+                .and_then(|menu| menu
+                    .show_on_cursor(hwnd)
+                    .map_err(|err| log::warn!("Failed to show menu: {err}"))
+                    .ok());
         }
         WM_COMMAND => {
             let id = LOWORD(wparam.0 as _);
-            println!("Command: {}", id);
-            //if id == 42 {
-            //    PostMessageW(HWND::default(), WM_QUIT, WPARAM::default(), LPARAM::default()).unwrap();
-            //}
             if let Some(menu) = subclass_input.menu.as_ref() {
                 match menu.map(id) {
-                    None => println!("Unknown id"),
+                    None => log::debug!("Unknown menu item id: {id}"),
                     Some(signal) => (subclass_input.callback)(TrayEvent::Menu(signal))
                 }
             }
@@ -209,7 +200,8 @@ fn get_class_name() -> PCWSTR {
             lpszClassName: class_name,
             ..Default::default()
         };
-        unsafe { RegisterClassW(&wnd_class); }
+        let class = unsafe { RegisterClassW(&wnd_class) };
+        log::trace!("Registered tray window class: 0x{:x}", class);
     });
 
     class_name
@@ -237,4 +229,12 @@ fn get_instance_handle() -> HINSTANCE {
     }
 
     HINSTANCE(unsafe { &__ImageBase as *const _ as _ })
+}
+
+
+pub type PlatformError = windows::core::Error;
+impl From<PlatformError> for ErrorSource {
+    fn from(value: PlatformError) -> Self {
+        ErrorSource::Os(value)
+    }
 }
