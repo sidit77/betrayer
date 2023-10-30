@@ -21,7 +21,7 @@ fn main() -> Result<()> {
         .build()?;
 
     let proxy = event_loop.create_proxy();
-    let _tray = TrayIconBuilder::new()
+    let tray = TrayIconBuilder::new()
         .with_tooltip("Demo System Tray")
         .with_menu(Menu::new([
             MenuItem::menu("Profiles", [
@@ -32,15 +32,17 @@ fn main() -> Result<()> {
             MenuItem::button("Open", Signal::Open),
             MenuItem::button("Quit", Signal::Quit)
         ]))
-        .build(move |s| {let _ = proxy.send_event(s); });
+        .build(move |s| {let _ = proxy.send_event(s); })?;
 
     event_loop.set_control_flow(ControlFlow::Wait);
     event_loop.run(|event, evtl| {
         match event {
             Event::UserEvent(TrayEvent::Menu(signal)) => {
                 log::info!("Signal: {:?}", signal);
-                if signal == Signal::Quit {
-                    evtl.exit();
+                match signal {
+                    Signal::Profile(i) => tray.set_tooltip(format!("Active Profile: {i}")),
+                    Signal::Open => {}
+                    Signal::Quit => evtl.exit()
                 }
             }
             _ => {}

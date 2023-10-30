@@ -3,6 +3,8 @@ use crate::platform::NativeTrayIcon;
 
 mod platform;
 mod error;
+mod icon;
+mod utils;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct TrayIconBuilder<T = ()> {
@@ -42,6 +44,12 @@ impl<T: Clone + 'static> TrayIconBuilder<T> {
 }
 
 pub struct TrayIcon(NativeTrayIcon);
+
+impl TrayIcon {
+    pub fn set_tooltip<S: ToString>(&self, tooltip: impl Into<Option<S>>) {
+        self.0.set_tooltip(tooltip.into().map(|s| s.to_string()))
+    }
+}
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum ClickType {
