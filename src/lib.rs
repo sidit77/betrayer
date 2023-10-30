@@ -22,7 +22,7 @@ impl<T> TrayIconBuilder<T> {
 
 }
 
-impl<T: Clone> TrayIconBuilder<T> {
+impl<T: Clone + 'static> TrayIconBuilder<T> {
 
     pub fn build<F>(self, callback: F) -> TrayIcon
         where F: FnMut(T) + Send + 'static

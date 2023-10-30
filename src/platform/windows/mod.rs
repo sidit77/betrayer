@@ -1,5 +1,7 @@
 mod menu;
 
+use std::any::Any;
+use std::iter::once;
 use std::mem::size_of;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Once;
@@ -22,8 +24,9 @@ pub struct NativeTrayIcon {
 
 impl NativeTrayIcon {
 
-    pub fn new<T, F>(builder: TrayIconBuilder<T>, callback: F) -> Self
-        where F: FnMut(T) + Send + 'static
+    pub fn new<T, F>(builder: TrayIconBuilder<T>, mut callback: F) -> Self
+        where F: FnMut(T) + Send + 'static,
+              T: Clone + 'static
     {
 
         let hwnd = unsafe {
@@ -58,8 +61,23 @@ impl NativeTrayIcon {
 
         unsafe { Shell_NotifyIconW(NIM_ADD, &notify_icon_data).ok().unwrap() };
 
+        let menu = builder
+            .menu
+            .map(NativeMenu::try_from)
+            .transpose()
+            .unwrap();
+
+        let erased_callback: Box<dyn FnMut(&dyn Any) + 'static> = Box::new(move |signal: &dyn Any | {
+            let signal = signal
+                .downcast_ref::<T>()
+                .expect("")
+                .clone();
+            callback(signal);
+        });
+
         let data = TrayData {
-            menu: NativeMenu::new().unwrap(),
+            menu,
+            callback: erased_callback,
         };
 
         unsafe {
@@ -97,7 +115,8 @@ impl Drop for NativeTrayIcon {
 }
 
 struct TrayData {
-    menu: NativeMenu
+    menu: Option<NativeMenu>,
+    callback: Box<dyn FnMut(&dyn Any) + 'static>
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -120,6 +139,7 @@ impl ClickType {
 
 unsafe extern "system" fn tray_subclass_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM, _id: usize, subclass_input_ptr: usize) -> LRESULT {
     let subclass_input_ptr = subclass_input_ptr as *mut TrayData;
+    let subclass_input = &mut *subclass_input_ptr;
     //println!("msg: {}", msg);
     match msg {
         WM_DESTROY => {
@@ -130,25 +150,33 @@ unsafe extern "system" fn tray_subclass_proc(hwnd: HWND, msg: u32, wparam: WPARA
         WM_USER_TRAY_ICON => if let Some(click) = ClickType::from_lparam(lparam) {
             println!("click: {:?}", click);
             if click == ClickType::Right {
-                let mut cursor = POINT::default();
-                GetCursorPos(&mut cursor).unwrap();
-                SetForegroundWindow(hwnd).unwrap();
-                let hmenu = (*subclass_input_ptr).menu.hmenu();
-                TrackPopupMenu(
-                    hmenu,
-                    TPM_BOTTOMALIGN | TPM_LEFTALIGN,
-                    cursor.x, cursor.y,
-                    0,
-                    hwnd,
-                    None
-                ).unwrap();
+                if let Some(menu) =  subclass_input.menu.as_ref() {
+                    let mut cursor = POINT::default();
+                    GetCursorPos(&mut cursor).unwrap();
+                    SetForegroundWindow(hwnd).unwrap();
+                    let hmenu = menu.hmenu();
+                    TrackPopupMenu(
+                        hmenu,
+                        TPM_BOTTOMALIGN | TPM_LEFTALIGN,
+                        cursor.x, cursor.y,
+                        0,
+                        hwnd,
+                        None
+                    ).unwrap();
+                }
             }
         }
         WM_COMMAND => {
             let id = LOWORD(wparam.0 as _);
             println!("Command: {}", id);
-            if id == 42 {
-                PostMessageW(HWND::default(), WM_QUIT, WPARAM::default(), LPARAM::default()).unwrap();
+            //if id == 42 {
+            //    PostMessageW(HWND::default(), WM_QUIT, WPARAM::default(), LPARAM::default()).unwrap();
+            //}
+            if let Some(menu) = subclass_input.menu.as_ref() {
+                match menu.map(id) {
+                    None => println!("Unknown id"),
+                    Some(signal) => (subclass_input.callback)(signal)
+                }
             }
         }
         _ => {}
@@ -189,6 +217,13 @@ fn get_class_name() -> PCWSTR {
     });
 
     class_name
+}
+
+fn encode_wide(string: &str) -> Vec<u16> {
+    string
+        .encode_utf16()
+        .chain(once(0))
+        .collect()
 }
 
 // taken from winit's code base

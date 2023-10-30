@@ -1,5 +1,5 @@
-use windows::Win32::Foundation::HWND;
-use windows::Win32::UI::WindowsAndMessaging::{DispatchMessageW, GetMessageW, MSG, TranslateMessage};
+use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+use windows::Win32::UI::WindowsAndMessaging::{DispatchMessageW, GetMessageW, MSG, PostMessageW, TranslateMessage, WM_QUIT};
 use betrayer::{Menu, MenuItem, TrayIconBuilder};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -20,7 +20,12 @@ fn main() {
             MenuItem::button("Open", Signal::Open),
             MenuItem::button("Quit", Signal::Quit)
         ]))
-        .build(|s| println!("Clicked: {:?}", s));
+        .build(|s| {
+            println!("Clicked: {:?}", s);
+            if s == Signal::Quit {
+                unsafe { PostMessageW(HWND::default(), WM_QUIT, WPARAM::default(), LPARAM::default()).unwrap(); }
+            }
+        });
 
     unsafe {
         let mut msg: MSG = MSG::default();
