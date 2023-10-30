@@ -6,7 +6,8 @@ mod error;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct TrayIconBuilder<T = ()> {
-    menu: Option<Menu<T>>
+    menu: Option<Menu<T>>,
+    tooltip: Option<String>
 }
 
 impl<T> TrayIconBuilder<T> {
@@ -14,11 +15,17 @@ impl<T> TrayIconBuilder<T> {
     pub fn new() -> Self {
         Self {
             menu: None,
+            tooltip: None,
         }
     }
 
     pub fn with_menu(mut self, menu: Menu<T>) -> Self {
         self.menu = Some(menu);
+        self
+    }
+
+    pub fn with_tooltip<S: ToString>(mut self, tooltip: S) -> Self {
+        self.tooltip = Some(tooltip.to_string());
         self
     }
 

@@ -9,7 +9,7 @@ use once_cell::sync::Lazy;
 use windows::core::{PCWSTR, w};
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::SystemServices::IMAGE_DOS_HEADER;
-use windows::Win32::UI::Shell::{DefSubclassProc, NIF_ICON, NIF_MESSAGE, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW, SetWindowSubclass, Shell_NotifyIconW};
+use windows::Win32::UI::Shell::{DefSubclassProc, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW, SetWindowSubclass, Shell_NotifyIconW};
 use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, DefWindowProcW, DestroyWindow, HMENU, HWND_MESSAGE, IDI_QUESTION, LoadIconW, RegisterClassW, RegisterWindowMessageW, WINDOW_EX_STYLE, WINDOW_STYLE, WM_COMMAND, WM_DESTROY, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW};
 use crate::platform::windows::menu::NativeMenu;
 use crate::{ClickType, ensure, TrayEvent, TrayIconBuilder};
@@ -50,7 +50,7 @@ impl NativeTrayIcon {
 
         let icon = unsafe { LoadIconW(None, IDI_QUESTION)? };
 
-        let notify_icon_data = NOTIFYICONDATAW {
+        let mut icon_data = NOTIFYICONDATAW {
             cbSize: size_of::<NOTIFYICONDATAW>() as u32,
             uFlags: NIF_MESSAGE | NIF_ICON/* | NIF_TIP*/,
             hWnd: hwnd,
@@ -61,7 +61,16 @@ impl NativeTrayIcon {
             ..Default::default()
         };
 
-        unsafe { Shell_NotifyIconW(NIM_ADD, &notify_icon_data).ok()? };
+        if let Some(tooltip) = builder.tooltip {
+            icon_data.uFlags |= NIF_TIP;
+            tooltip
+                .encode_utf16()
+                .take(icon_data.szTip.len() - 1)
+                .enumerate()
+                .for_each(|(i, c)| icon_data.szTip[i] = c);
+        }
+
+        unsafe { Shell_NotifyIconW(NIM_ADD, &icon_data).ok()? };
 
         let menu = builder
             .menu

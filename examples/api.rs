@@ -22,6 +22,7 @@ fn main() -> Result<()> {
 
     let proxy = event_loop.create_proxy();
     let _tray = TrayIconBuilder::new()
+        .with_tooltip("Demo System Tray")
         .with_menu(Menu::new([
             MenuItem::menu("Profiles", [
                 MenuItem::button("Music", Signal::Profile(0)),
