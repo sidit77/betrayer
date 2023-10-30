@@ -10,9 +10,9 @@ use windows::core::{PCWSTR, w};
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::System::SystemServices::IMAGE_DOS_HEADER;
 use windows::Win32::UI::Shell::{DefSubclassProc, NIF_ICON, NIF_MESSAGE, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW, SetWindowSubclass, Shell_NotifyIconW};
-use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, DefWindowProcW, DestroyWindow, GetCursorPos, HMENU, HWND_MESSAGE, IDI_QUESTION, LoadIconW, PostMessageW, RegisterClassW, RegisterWindowMessageW, SetForegroundWindow, TPM_BOTTOMALIGN, TPM_LEFTALIGN, TrackPopupMenu, WINDOW_EX_STYLE, WINDOW_STYLE, WM_COMMAND, WM_DESTROY, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_QUIT, WM_RBUTTONUP, WNDCLASSW};
+use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, DefWindowProcW, DestroyWindow, GetCursorPos, HMENU, HWND_MESSAGE, IDI_QUESTION, LoadIconW, RegisterClassW, RegisterWindowMessageW, SetForegroundWindow, TPM_BOTTOMALIGN, TPM_LEFTALIGN, TrackPopupMenu, WINDOW_EX_STYLE, WINDOW_STYLE, WM_COMMAND, WM_DESTROY, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW};
 use crate::platform::windows::menu::NativeMenu;
-use crate::TrayIconBuilder;
+use crate::{ClickType, TrayEvent, TrayIconBuilder};
 
 const TRAY_SUBCLASS_ID: usize = 6001;
 const WM_USER_TRAY_ICON: u32 = 6002;
@@ -25,7 +25,7 @@ pub struct NativeTrayIcon {
 impl NativeTrayIcon {
 
     pub fn new<T, F>(builder: TrayIconBuilder<T>, mut callback: F) -> Self
-        where F: FnMut(T) + Send + 'static,
+        where F: FnMut(TrayEvent<T>) + Send + 'static,
               T: Clone + 'static
     {
 
@@ -67,12 +67,15 @@ impl NativeTrayIcon {
             .transpose()
             .unwrap();
 
-        let erased_callback: Box<dyn FnMut(&dyn Any) + 'static> = Box::new(move |signal: &dyn Any | {
-            let signal = signal
-                .downcast_ref::<T>()
-                .expect("")
-                .clone();
-            callback(signal);
+        let erased_callback: Box<dyn FnMut(TrayEvent<&dyn Any>) + 'static> = Box::new(move |event: TrayEvent<&dyn Any> | {
+            let event = match event {
+                TrayEvent::Menu(signal) => TrayEvent::Menu(signal
+                    .downcast_ref::<T>()
+                    .expect("")
+                    .clone()),
+                TrayEvent::Tray(click) => TrayEvent::Tray(click)
+            };
+            callback(event);
         });
 
         let data = TrayData {
@@ -116,14 +119,7 @@ impl Drop for NativeTrayIcon {
 
 struct TrayData {
     menu: Option<NativeMenu>,
-    callback: Box<dyn FnMut(&dyn Any) + 'static>
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-enum ClickType {
-    Left,
-    Right,
-    Double
+    callback: Box<dyn FnMut(TrayEvent<&dyn Any>) + 'static>
 }
 
 impl ClickType {
@@ -148,7 +144,7 @@ unsafe extern "system" fn tray_subclass_proc(hwnd: HWND, msg: u32, wparam: WPARA
         },
         _ if msg == *S_U_TASKBAR_RESTART => println!("Taskbar restarted"),
         WM_USER_TRAY_ICON => if let Some(click) = ClickType::from_lparam(lparam) {
-            println!("click: {:?}", click);
+            (subclass_input.callback)(TrayEvent::Tray(click));
             if click == ClickType::Right {
                 if let Some(menu) =  subclass_input.menu.as_ref() {
                     let mut cursor = POINT::default();
@@ -175,7 +171,7 @@ unsafe extern "system" fn tray_subclass_proc(hwnd: HWND, msg: u32, wparam: WPARA
             if let Some(menu) = subclass_input.menu.as_ref() {
                 match menu.map(id) {
                     None => println!("Unknown id"),
-                    Some(signal) => (subclass_input.callback)(signal)
+                    Some(signal) => (subclass_input.callback)(TrayEvent::Menu(signal))
                 }
             }
         }

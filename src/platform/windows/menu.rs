@@ -1,5 +1,5 @@
 use std::any::Any;
-use windows::core::{PCWSTR, Result, w};
+use windows::core::{PCWSTR, Result};
 use windows::Win32::UI::WindowsAndMessaging::{AppendMenuW, CreatePopupMenu, DestroyMenu, HMENU, MF_POPUP, MF_SEPARATOR, MF_STRING};
 use crate::{Menu, MenuItem};
 use crate::platform::windows::encode_wide;

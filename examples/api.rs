@@ -1,6 +1,6 @@
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use windows::Win32::UI::WindowsAndMessaging::{DispatchMessageW, GetMessageW, MSG, PostMessageW, TranslateMessage, WM_QUIT};
-use betrayer::{Menu, MenuItem, TrayIconBuilder};
+use betrayer::{Menu, MenuItem, TrayEvent, TrayIconBuilder};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum Signal {
@@ -22,7 +22,7 @@ fn main() {
         ]))
         .build(|s| {
             println!("Clicked: {:?}", s);
-            if s == Signal::Quit {
+            if s == TrayEvent::Menu(Signal::Quit) {
                 unsafe { PostMessageW(HWND::default(), WM_QUIT, WPARAM::default(), LPARAM::default()).unwrap(); }
             }
         });

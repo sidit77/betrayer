@@ -25,7 +25,7 @@ impl<T> TrayIconBuilder<T> {
 impl<T: Clone + 'static> TrayIconBuilder<T> {
 
     pub fn build<F>(self, callback: F) -> TrayIcon
-        where F: FnMut(T) + Send + 'static
+        where F: FnMut(TrayEvent<T>) + Send + 'static
     {
         TrayIcon(NativeTrayIcon::new(self, callback))
     }
@@ -33,6 +33,19 @@ impl<T: Clone + 'static> TrayIconBuilder<T> {
 }
 
 pub struct TrayIcon(NativeTrayIcon);
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum ClickType {
+    Left,
+    Right,
+    Double
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum TrayEvent<T> {
+    Tray(ClickType),
+    Menu(T)
+}
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Menu<T> {
