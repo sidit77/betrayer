@@ -4,6 +4,7 @@ mod tray;
 use std::any::Any;
 use std::cell::Cell;
 use std::iter::once;
+use std::marker::PhantomData;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Once;
@@ -14,18 +15,22 @@ use windows::Win32::System::SystemServices::IMAGE_DOS_HEADER;
 use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
 use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, DefWindowProcW, DestroyWindow, HMENU, HWND_MESSAGE, IDI_QUESTION, LoadIconW, RegisterClassW, RegisterWindowMessageW, WINDOW_EX_STYLE, WINDOW_STYLE, WM_COMMAND, WM_DESTROY, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW};
 use crate::platform::windows::menu::NativeMenu;
-use crate::{ClickType, ensure, TrayEvent, TrayIconBuilder};
+use crate::{ClickType, ensure, Menu, TrayEvent, TrayIconBuilder};
 use crate::error::{ErrorSource, TrayError, TrayResult};
 use crate::platform::windows::tray::{DataAction, TrayIconData};
 use crate::utils::OptionCellExt;
 
+//TODO Better error handling for the set_* functions
+//TODO Replace Cell to avoid potential overrides
+
 const TRAY_SUBCLASS_ID: usize = 6001;
 const WM_USER_TRAY_ICON: u32 = 6002;
 
-pub struct NativeTrayIcon {
+pub struct NativeTrayIcon<T> {
     hwnd: HWND,
     tray_id: u32,
-    shared: Rc<SharedTrayData>
+    shared: Rc<SharedTrayData>,
+    _signal_type: PhantomData<T>
 }
 
 struct TrayLoopData {
@@ -38,11 +43,10 @@ struct SharedTrayData {
     tooltip: Cell<Option<String>>
 }
 
-impl NativeTrayIcon {
+impl<T: Clone + 'static> NativeTrayIcon<T> {
 
-    pub fn new<T, F>(builder: TrayIconBuilder<T>, mut callback: F) -> TrayResult<Self>
-        where F: FnMut(TrayEvent<T>) + Send + 'static,
-              T: Clone + 'static
+    pub fn new<F>(builder: TrayIconBuilder<T>, mut callback: F) -> TrayResult<Self>
+        where F: FnMut(TrayEvent<T>) + Send + 'static
     {
         let tray_id = GLOBAL_TRAY_COUNTER.fetch_add(1, Ordering::Relaxed);
 
@@ -104,10 +108,14 @@ impl NativeTrayIcon {
             hwnd,
             tray_id,
             shared,
+            _signal_type: PhantomData::default(),
         })
 
     }
 
+}
+
+impl<T> NativeTrayIcon<T> {
     pub fn set_tooltip(&self, tooltip: Option<String>) {
         TrayIconData::default()
             .with_tooltip(tooltip
@@ -121,7 +129,15 @@ impl NativeTrayIcon {
 
 }
 
-impl Drop for NativeTrayIcon {
+impl<T: 'static> NativeTrayIcon<T> {
+    pub fn set_menu(&self, menu: Option<Menu<T>>) {
+        let menu = menu
+            .map(|m| NativeMenu::try_from(m).unwrap());
+        self.shared.menu.set(menu);
+    }
+}
+
+impl<T> Drop for NativeTrayIcon<T> {
     fn drop(&mut self) {
         log::trace!("Destroying message window (tray id: {})", self.tray_id);
 

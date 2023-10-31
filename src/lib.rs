@@ -35,7 +35,7 @@ impl<T> TrayIconBuilder<T> {
 
 impl<T: Clone + 'static> TrayIconBuilder<T> {
 
-    pub fn build<F>(self, callback: F) -> TrayResult<TrayIcon>
+    pub fn build<F>(self, callback: F) -> TrayResult<TrayIcon<T>>
         where F: FnMut(TrayEvent<T>) + Send + 'static
     {
         Ok(TrayIcon(NativeTrayIcon::new(self, callback)?))
@@ -43,11 +43,17 @@ impl<T: Clone + 'static> TrayIconBuilder<T> {
 
 }
 
-pub struct TrayIcon(NativeTrayIcon);
+pub struct TrayIcon<T>(NativeTrayIcon<T>);
 
-impl TrayIcon {
+impl<T> TrayIcon<T> {
     pub fn set_tooltip<S: ToString>(&self, tooltip: impl Into<Option<S>>) {
         self.0.set_tooltip(tooltip.into().map(|s| s.to_string()))
+    }
+}
+
+impl<T: 'static> TrayIcon<T> {
+    pub fn set_menu(&self, menu: impl Into<Option<Menu<T>>>) {
+        self.0.set_menu(menu.into())
     }
 }
 
@@ -84,7 +90,8 @@ pub enum MenuItem<T> {
     Separator,
     Button {
         name: String,
-        signal: T
+        signal: T,
+        checked: bool
     },
     Menu {
         name: String,
@@ -98,12 +105,13 @@ impl<T> MenuItem<T> {
         Self::Separator
     }
 
-    pub fn button<S>(name: S, signal: T) -> Self
+    pub fn button<S>(name: S, signal: T, checked: bool) -> Self
         where S: ToString
     {
         Self::Button {
             name: name.to_string(),
             signal,
+            checked,
         }
     }
 

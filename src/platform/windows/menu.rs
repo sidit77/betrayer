@@ -1,7 +1,7 @@
 use std::any::Any;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{HWND, POINT};
-use windows::Win32::UI::WindowsAndMessaging::{AppendMenuW, CreatePopupMenu, DestroyMenu, GetCursorPos, HMENU, MF_POPUP, MF_SEPARATOR, MF_STRING, SetForegroundWindow, TPM_BOTTOMALIGN, TPM_LEFTALIGN, TrackPopupMenu};
+use windows::Win32::UI::WindowsAndMessaging::{AppendMenuW, CreatePopupMenu, DestroyMenu, GetCursorPos, HMENU, MF_CHECKED, MF_POPUP, MF_SEPARATOR, MF_STRING, SetForegroundWindow, TPM_BOTTOMALIGN, TPM_LEFTALIGN, TrackPopupMenu};
 use crate::{Menu, MenuItem};
 use crate::error::{TrayError, TrayResult};
 use crate::platform::windows::encode_wide;
@@ -45,9 +45,12 @@ fn add_all<T>(hmenu: HMENU, signals: &mut Vec<T>, items: Vec<MenuItem<T>>) -> Tr
             MenuItem::Separator => {
                 unsafe { AppendMenuW(hmenu, MF_SEPARATOR, 0, None)? };
             }
-            MenuItem::Button { name, signal } => {
+            MenuItem::Button { name, signal, checked } => {
+                let checked = checked
+                    .then_some(MF_CHECKED)
+                    .unwrap_or_default();
                 let wide = encode_wide(&name);
-                unsafe { AppendMenuW(hmenu, MF_STRING, signals.len(), PCWSTR(wide.as_ptr()))? };
+                unsafe { AppendMenuW(hmenu, MF_STRING | checked, signals.len(), PCWSTR(wide.as_ptr()))? };
                 signals.push(signal);
             }
             MenuItem::Menu { name, children } => {
