@@ -1,5 +1,6 @@
 mod menu;
 mod tray;
+mod icon;
 
 use std::any::Any;
 use std::cell::Cell;
@@ -13,12 +14,14 @@ use windows::core::{PCWSTR, w};
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::SystemServices::IMAGE_DOS_HEADER;
 use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
-use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, DefWindowProcW, DestroyWindow, HMENU, HWND_MESSAGE, IDI_QUESTION, LoadIconW, RegisterClassW, RegisterWindowMessageW, WINDOW_EX_STYLE, WINDOW_STYLE, WM_COMMAND, WM_DESTROY, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW};
+use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, DefWindowProcW, DestroyWindow, HMENU, HWND_MESSAGE, RegisterClassW, RegisterWindowMessageW, WINDOW_EX_STYLE, WINDOW_STYLE, WM_COMMAND, WM_DESTROY, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW};
 use crate::platform::windows::menu::NativeMenu;
 use crate::{ClickType, ensure, Menu, TrayEvent, TrayIconBuilder};
 use crate::error::{ErrorSource, TrayError, TrayResult};
 use crate::platform::windows::tray::{DataAction, TrayIconData};
 use crate::utils::OptionCellExt;
+
+pub use icon::NativeIcon;
 
 //TODO Better error handling for the set_* functions
 //TODO Replace Cell to avoid potential overrides
@@ -40,7 +43,8 @@ struct TrayLoopData {
 
 struct SharedTrayData {
     menu: Cell<Option<NativeMenu>>,
-    tooltip: Cell<Option<String>>
+    tooltip: Cell<Option<String>>,
+    icon: Cell<Option<NativeIcon>>
 }
 
 impl<T: Clone + 'static> NativeTrayIcon<T> {
@@ -73,11 +77,11 @@ impl<T: Clone + 'static> NativeTrayIcon<T> {
                 .map(NativeMenu::try_from)
                 .transpose()?),
             tooltip: Cell::new(builder.tooltip),
+            icon: Cell::new(builder.icon.map(NativeIcon::from)),
         });
 
         TrayIconData::from(&shared)
             .with_message(WM_USER_TRAY_ICON)
-            .with_icon(unsafe { LoadIconW(None, IDI_QUESTION)? })
             .apply(hwnd, tray_id, DataAction::Add)?;
 
 
@@ -281,6 +285,13 @@ impl<T: AsRef<SharedTrayData>> From<T> for TrayIconData {
                 .take()
                 .unwrap()
                 .with_tooltip(tooltip);
+            data = Some(t);
+        });
+        shared.icon.with(|icon| {
+            let t = data
+                .take()
+                .unwrap()
+                .with_icon(icon.handle());
             data = Some(t);
         });
         data.unwrap()

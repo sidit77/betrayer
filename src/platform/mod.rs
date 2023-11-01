@@ -1,2 +1,2 @@
 mod windows;
-pub use windows::{NativeTrayIcon, PlatformError};
+pub use windows::{NativeTrayIcon, NativeIcon, PlatformError};

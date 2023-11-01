@@ -3,7 +3,7 @@ use simple_logger::SimpleLogger;
 use winit::event::Event;
 use winit::event_loop::{ControlFlow, EventLoopBuilder};
 use anyhow::Result;
-use betrayer::{Menu, MenuItem, TrayEvent, TrayIconBuilder};
+use betrayer::{Icon, Menu, MenuItem, TrayEvent, TrayIconBuilder};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum Signal {
@@ -24,6 +24,7 @@ fn main() -> Result<()> {
 
     let proxy = event_loop.create_proxy();
     let tray = TrayIconBuilder::new()
+        .with_icon(Icon::from_rgba(vec![255u8; 32 * 32 * 4], 32, 32)?)
         .with_tooltip("Demo System Tray")
         .with_menu(build_menu(selected))
         .build(move |s| {let _ = proxy.send_event(s); })?;
