@@ -39,7 +39,7 @@ impl<T> TrayIconBuilder<T> {
 
 }
 
-impl<T: Clone + 'static> TrayIconBuilder<T> {
+impl<T: Clone + Send + 'static> TrayIconBuilder<T> {
 
     pub fn build<F>(self, callback: F) -> TrayResult<TrayIcon<T>>
         where F: FnMut(TrayEvent<T>) + Send + 'static
@@ -89,6 +89,13 @@ impl<T> Menu<T> {
             items: items.into_iter().collect(),
         }
     }
+    
+    pub fn empty() -> Self {
+        Self {
+            items: Vec::new(),
+        }
+    }    
+    
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
