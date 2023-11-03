@@ -3,7 +3,6 @@ use crate::platform::{NativeIcon, NativeTrayIcon};
 
 mod platform;
 mod error;
-mod icon;
 mod utils;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
