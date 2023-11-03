@@ -14,7 +14,8 @@ enum Signal {
 
 fn main() -> Result<()> {
     SimpleLogger::new()
-        .with_level(LevelFilter::Trace)
+        .with_module_level("betrayer", LevelFilter::Trace)
+        .with_level(LevelFilter::Debug)
         .init()?;
 
     let event_loop = EventLoopBuilder::with_user_event()
