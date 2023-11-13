@@ -57,7 +57,7 @@ impl<T> TrayIcon<T> {
     }
 }
 
-impl<T: 'static> TrayIcon<T> {
+impl<T: 'static + Clone + Send> TrayIcon<T> {
     pub fn set_menu(&self, menu: impl Into<Option<Menu<T>>>) {
         self.0.set_menu(menu.into())
     }

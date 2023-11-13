@@ -1,10 +1,11 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicU32, Ordering};
 use parking_lot::Mutex;
 use zbus::{dbus_interface, SignalContext};
 use zbus::zvariant::{OwnedValue, Str, Value};
 use crate::{Menu, MenuItem, TrayEvent};
 
+#[derive(Clone)]
 struct MenuEntry<T> {
     properties: HashMap<String, OwnedValue>,
     children: Vec<usize>,
@@ -15,8 +16,8 @@ impl<T> MenuEntry<T> {
     fn get_properties(&self, requested: &[&str]) -> HashMap<String, OwnedValue> {
         self.properties
             .iter()
-            .filter_map(|(k, v)| (requested.is_empty() || requested.contains(&k.as_str()))
-                .then(|| (k.clone(), v.clone())))
+            .filter(|(k, _)| requested.is_empty() || requested.contains(&k.as_str()))
+            .map(clone_inner)
             .collect()
     }
 }
@@ -31,59 +32,138 @@ impl<T> DBusMenu<T> {
     pub fn new<F>(menu: Menu<T>, callback: F) -> Self 
         where F: FnMut(TrayEvent<T>) + Send + 'static
     {
-        let mut entries = Vec::new();
 
-        entries.push(MenuEntry {
-            properties: HashMap::from([(String::from("children-display"), OwnedValue::from(Str::from_static("submenu")))]),
-            children: (1..(menu.items.len() + 1)).collect(),
-            signal: None,
-        });
-
-        let mut items = VecDeque::from_iter(menu.items);
-
-        while let Some(item) = items.pop_front() {
-            let entry = match item {
-                MenuItem::Separator => MenuEntry {
-                    properties: HashMap::from([
-                        (String::from("type"), OwnedValue::from(Str::from_static("separator")))
-                    ]),
-                    children: vec![],
-                    signal: None,
-                },
-                MenuItem::Button { name, signal, checked } => MenuEntry {
-                    properties: HashMap::from([
-                        (String::from("label"), OwnedValue::from(Str::from(name))),
-                        (String::from("toggle-type"), OwnedValue::from(Str::from_static("checkmark"))),
-                        (String::from("toggle-state"), OwnedValue::from(if checked {1i32 } else { 0i32 }))
-                    ]),
-                    children: vec![],
-                    signal: Some(signal),
-                },
-                MenuItem::Menu { name, children } => MenuEntry {
-                    properties: HashMap::from([
-                        (String::from("label"), OwnedValue::from(Str::from(name))),
-                        (String::from("children-display"), OwnedValue::from(Str::from_static("submenu")))
-                    ]),
-                    children: {
-                        let start = 1 + entries.len() + items.len();
-                        items.extend(children);
-                        let end = 1 + entries.len() + items.len();
-                        (start..end).collect()
-                    },
-                    signal: None,
-                }
-            };
-            entries.push(entry);
-        }
-
+        let entries = build_menu(menu);
         Self {
             revision: AtomicU32::new(0),
             entries: Mutex::new(entries),
             callback: Mutex::new(Box::new(callback)),
         }
     }
+
 } 
 
+impl<T: Clone + Send + 'static> DBusMenu<T> {
+    pub async fn update_menu(&self, menu: Menu<T>, signal_context: &SignalContext<'_>) -> zbus::Result<()> {
+        let entries = build_menu(menu);
+        let old_entries = self.entries.lock().clone();
+        let (layout, updated, removed) = generate_diff(&entries, &old_entries);
+        *self.entries.lock() = entries;
+        if let Some(parent) = layout {
+            let revision = self.revision.fetch_add(1, Ordering::SeqCst) + 1;
+            log::trace!("Sending layout update signal (parent: {parent}, revision: {revision})");
+            Self::layout_updated(signal_context, revision, parent).await?;
+        }
+        if !updated.is_empty() || !removed.is_empty() {
+            log::trace!("Sending property update signal (Updated: {updated:?}, Removed: {removed:?}");
+            Self::items_properties_updated(signal_context, &updated, &removed).await?;
+        }
+        Ok(())
+    }
+}
+
+fn build_menu<T>(menu: Menu<T>) -> Vec<MenuEntry<T>> {
+    log::trace!("Building layout");
+    let mut entries = Vec::new();
+
+    entries.push(MenuEntry {
+        properties: HashMap::from([(String::from("children-display"), OwnedValue::from(Str::from_static("submenu")))]),
+        children: (1..(menu.items.len() + 1)).collect(),
+        signal: None,
+    });
+
+    let mut items = VecDeque::from_iter(menu.items);
+
+    while let Some(item) = items.pop_front() {
+        let entry = match item {
+            MenuItem::Separator => MenuEntry {
+                properties: HashMap::from([
+                    (String::from("type"), OwnedValue::from(Str::from_static("separator")))
+                ]),
+                children: vec![],
+                signal: None,
+            },
+            MenuItem::Button { name, signal, checked } => MenuEntry {
+                properties: HashMap::from([
+                    (String::from("label"), OwnedValue::from(Str::from(name))),
+                    (String::from("toggle-type"), OwnedValue::from(Str::from_static("checkmark"))),
+                    (String::from("toggle-state"), OwnedValue::from(if checked {1i32 } else { 0i32 }))
+                ]),
+                children: vec![],
+                signal: Some(signal),
+            },
+            MenuItem::Menu { name, children } => MenuEntry {
+                properties: HashMap::from([
+                    (String::from("label"), OwnedValue::from(Str::from(name))),
+                    (String::from("children-display"), OwnedValue::from(Str::from_static("submenu")))
+                ]),
+                children: {
+                    let start = 1 + entries.len() + items.len();
+                    items.extend(children);
+                    let end = 1 + entries.len() + items.len();
+                    (start..end).collect()
+                },
+                signal: None,
+            }
+        };
+        entries.push(entry);
+    }
+    entries
+}
+
+fn generate_diff<T>(new: &Vec<MenuEntry<T>>, old: &Vec<MenuEntry<T>>) -> (Option<i32>, Vec<(i32, HashMap<String, OwnedValue>)>, Vec<(i32, Vec<String>)>) {
+    let mut updated = Vec::new();
+    let mut removed = Vec::new();
+    let mut changed = HashSet::new();
+    for (i, (new, old)) in new.iter().zip(old.iter()).enumerate() {
+        let r: Vec<String> = old.properties
+            .keys()
+            .filter(|k| !new.properties.contains_key(*k))
+            .cloned()
+            .collect();
+        if !r.is_empty() {
+            removed.push((i as i32, r));
+        }
+        let n: HashMap<String, OwnedValue> = new.properties
+            .iter()
+            .filter(|(k, v)| !old.properties
+                .get(*k)
+                .is_some_and(|ov| ov == *v))
+            .map(clone_inner)
+            .collect();
+        if !n.is_empty() {
+            updated.push((i as i32, n));
+        }
+        if new.children != old.children {
+            changed.insert(i);
+        }
+    }
+    let changed = match changed.len() {
+        0 => None,
+        1 => Some(*changed.iter().next().expect("There should be one element here") as i32),
+        _ => Some(find_common_root(new, &changed) as i32)
+    };
+    (changed, updated, removed)
+}
+
+fn find_common_root<T>(entries: &Vec<MenuEntry<T>>, changed: &HashSet<usize>) -> usize {
+    let mut cache = HashMap::new();
+    for (i, entry) in entries.iter().enumerate().rev() {
+        let c: u32 = u32::from(changed.contains(&i)) + entry
+            .children
+            .iter()
+            .map(|i| cache
+                .get(i)
+                .expect("The is now in breadth first order"))
+            .sum::<u32>();
+        cache.insert(i, c);
+    }
+    cache
+        .iter()
+        .filter_map(|(k, v)| (*v > 1).then_some(*k))
+        .min()
+        .expect("There should be a common root")
+}
 
 fn collect<T>(ids: &Vec<usize>, entries: &Vec<MenuEntry<T>>, property_names: &Vec<&str>, depth: u32) -> Vec<OwnedValue> {
     match depth {
@@ -159,11 +239,11 @@ impl<T: Clone + Send + 'static> DBusMenu<T> {
         Vec::new()
     }
 
-    fn about_to_show(&self, id: i32) -> bool {
+    fn about_to_show(&self, _id: i32) -> bool {
         false
     }
 
-    fn about_to_show_group(&self, ids: Vec<i32>) -> (Vec<i32>, Vec<i32>) {
+    fn about_to_show_group(&self, _ids: Vec<i32>) -> (Vec<i32>, Vec<i32>) {
         Default::default()
     }
 
@@ -172,7 +252,7 @@ impl<T: Clone + Send + 'static> DBusMenu<T> {
     async fn item_activation_requested(ctx: &SignalContext<'_>, id: i32, timestamp: u32) -> zbus::Result<()> { }
 
     #[dbus_interface(signal)]
-    async fn items_properties_updated(ctx: &SignalContext<'_>, updated_props: &[(i32, HashMap<&str, Value<'_>>, )], removed_props: &[(i32, &[&str])]) -> zbus::Result<()> { }
+    async fn items_properties_updated(ctx: &SignalContext<'_>, updated_props: &[(i32, HashMap<String, OwnedValue>, )], removed_props: &[(i32, Vec<String>)]) -> zbus::Result<()> { }
 
     #[dbus_interface(signal)]
     async fn layout_updated(ctx: &SignalContext<'_>, revision: u32, parent: i32) -> zbus::Result<()> { }
@@ -196,4 +276,8 @@ impl<T: Clone + Send + 'static> DBusMenu<T> {
     fn version(&self) -> u32 {
         3
     }
+}
+
+fn clone_inner<T1: Clone, T2: Clone>((a, b): (&T1, &T2)) -> (T1, T2) {
+    (a.clone(), b.clone())
 }

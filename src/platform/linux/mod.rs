@@ -7,10 +7,11 @@ use crate::error::{ErrorSource, TrayResult};
 use crate::{Menu, TrayEvent, TrayIconBuilder};
 use crate::platform::linux::menu::DBusMenu;
 
+static MENU_PATH: &'static str = "/MenuBar";
 static COUNTER: AtomicUsize = AtomicUsize::new(1);
 
 pub struct NativeTrayIcon<T> {
-    signal: Vec<T>,
+    _signal: Vec<T>,
     connection: Connection
 }
 
@@ -28,7 +29,7 @@ impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
         let conn = ConnectionBuilder::session()?
             .name(name.clone())?
             .serve_at("/StatusNotifierItem", StatusNotifierItem)?
-            .serve_at("/MenuBar", DBusMenu::new(builder.menu
+            .serve_at(MENU_PATH, DBusMenu::new(builder.menu
                 .unwrap_or_else(Menu::empty), callback))?
             //.internal_executor(false)
             .build()
@@ -44,7 +45,7 @@ impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
 
 
         Ok(Self {
-            signal: vec![],
+            _signal: vec![],
             connection: conn,
         })
 
@@ -56,6 +57,23 @@ impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
         async_io::block_on(Self::new_async(builder, callback))
     }
 
+
+    pub fn set_menu(&self, menu: Option<Menu<T>>) {
+        //TODO spawn this on the custom executor
+        async_io::block_on(self.set_menu_async(menu))
+    }
+
+    pub async fn set_menu_async(&self, menu: Option<Menu<T>>) {
+        let iref = self.connection
+            .object_server()
+            .interface::<_, DBusMenu<T>>(MENU_PATH)
+            .await
+            .unwrap();
+        let iface = iref.get().await;
+        iface.update_menu(menu.unwrap_or_else(Menu::empty), iref.signal_context())
+            .await
+            .unwrap();
+    }
 }
 
 impl<T> NativeTrayIcon<T> {
@@ -63,12 +81,6 @@ impl<T> NativeTrayIcon<T> {
 
     }
 
-}
-
-impl<T: 'static> NativeTrayIcon<T> {
-    pub fn set_menu(&self, _menu: Option<Menu<T>>) {
-
-    }
 }
 
 struct StatusNotifierItem;
@@ -158,7 +170,7 @@ impl StatusNotifierItem {
 
     #[dbus_interface(property)]
     fn menu(&self) -> OwnedObjectPath {
-        ObjectPath::from_str_unchecked("/MenuBar").into()
+        ObjectPath::from_str_unchecked(MENU_PATH).into()
     }
 
     #[dbus_interface(property)]
