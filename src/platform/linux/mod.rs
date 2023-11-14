@@ -1,18 +1,26 @@
 mod menu;
+mod item;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
-use zbus::{Connection, ConnectionBuilder, dbus_interface, dbus_proxy, SignalContext};
-use zbus::zvariant::{ObjectPath, OwnedObjectPath};
+use flume::Sender;
+use zbus::{ConnectionBuilder, dbus_proxy, Task};
 use crate::error::{ErrorSource, TrayResult};
 use crate::{Menu, TrayEvent, TrayIconBuilder};
+use crate::platform::linux::item::StatusNotifierItem;
 use crate::platform::linux::menu::DBusMenu;
 
 static MENU_PATH: &'static str = "/MenuBar";
 static COUNTER: AtomicUsize = AtomicUsize::new(1);
 
+enum TrayUpdate<T> {
+    Menu(Menu<T>)
+}
+
 pub struct NativeTrayIcon<T> {
-    _signal: Vec<T>,
-    connection: Connection
+    //_signal: Vec<T>,
+    //connection: Connection
+    _update_task: Task<()>,
+    sender: Sender<TrayUpdate<T>>
 }
 
 impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
@@ -28,25 +36,63 @@ impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
 
         let conn = ConnectionBuilder::session()?
             .name(name.clone())?
-            .serve_at("/StatusNotifierItem", StatusNotifierItem)?
+            .serve_at("/StatusNotifierItem", StatusNotifierItem::new(
+                builder.tooltip.unwrap_or_default()))?
             .serve_at(MENU_PATH, DBusMenu::new(builder.menu
                 .unwrap_or_else(Menu::empty), callback))?
-            //.internal_executor(false)
+            .internal_executor(true)
             .build()
             .await?;
+
+        let (sender, receiver) = flume::unbounded();
+        let receiver_task = {
+
+            let connection = conn.clone();
+            conn.executor().spawn(async move {
+                while let Ok(event) = receiver.recv_async().await {
+                    match event {
+                        TrayUpdate::Menu(menu) => {
+                            let iface = connection
+                                .object_server()
+                                .interface::<_, DBusMenu<T>>(MENU_PATH)
+                                .await.unwrap();
+                            let iref = iface.get().await;
+                            iref.update_menu(menu, iface.signal_context()).await.unwrap();
+                        }
+                    }
+                }
+            }, "event receiver")
+        };
+        //let _ = sender.send(TrayUpdate::Menu(Menu::empty()));
+        //{
+        //    let executor = conn.executor().clone();
+        //    std::thread::Builder::new()
+        //        .name("zbus::Connection executor".into())
+        //        .spawn(move || {
+        //            println!("Exec start");
+        //            async_io::block_on(async move {
+        //                // Run as long as there is a task to run.
+        //                while !executor.is_empty() {
+        //                    executor.tick().await;
+        //                }
+        //            });
+        //            println!("Exec end");
+        //        }).unwrap();
+        //}
 
         let proxy = StatusNotifierWatcherProxy::builder(&conn)
             .path("/StatusNotifierWatcher")?
             .build()
             .await?;
 
-        println!("{:?}", proxy.register_status_notifier_item(&name).await);
-
+        proxy.register_status_notifier_item(&name).await?;
 
 
         Ok(Self {
-            _signal: vec![],
-            connection: conn,
+            //_signal: vec![],
+            //connection: conn,
+            _update_task: receiver_task,
+            sender,
         })
 
     }
@@ -59,21 +105,24 @@ impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
 
 
     pub fn set_menu(&self, menu: Option<Menu<T>>) {
-        //TODO spawn this on the custom executor
-        async_io::block_on(self.set_menu_async(menu))
+        ////TODO spawn this on the custom executor
+        //async_io::block_on(self.set_menu_async(menu))
+        self.sender
+            .send(TrayUpdate::Menu(menu.unwrap_or_else(Menu::empty)))
+            .unwrap_or_else(|err| log::warn!("Failed to send update: {err}"));
     }
 
-    pub async fn set_menu_async(&self, menu: Option<Menu<T>>) {
-        let iref = self.connection
-            .object_server()
-            .interface::<_, DBusMenu<T>>(MENU_PATH)
-            .await
-            .unwrap();
-        let iface = iref.get().await;
-        iface.update_menu(menu.unwrap_or_else(Menu::empty), iref.signal_context())
-            .await
-            .unwrap();
-    }
+    //pub async fn set_menu_async(&self, menu: Option<Menu<T>>) {
+    //    let iref = self.connection
+    //        .object_server()
+    //        .interface::<_, DBusMenu<T>>(MENU_PATH)
+    //        .await
+    //        .unwrap();
+    //    let iface = iref.get().await;
+    //    iface.update_menu(menu.unwrap_or_else(Menu::empty), iref.signal_context())
+    //        .await
+    //        .unwrap();
+    //}
 }
 
 impl<T> NativeTrayIcon<T> {
@@ -82,128 +131,6 @@ impl<T> NativeTrayIcon<T> {
     }
 
 }
-
-struct StatusNotifierItem;
-
-#[dbus_interface(name = "org.kde.StatusNotifierItem")]
-impl StatusNotifierItem {
-
-    fn activate(&self, x: i32, y: i32) {
-        println!("activate {x} {y}");
-    }
-
-    fn context_menu(&self, x: i32, y: i32) {
-        println!("context menu {x} {y}");
-    }
-
-    fn scroll(&self, delta: i32, orientation: &str) {
-        println!("scroll {delta} {orientation}");
-    }
-
-    fn secondary_activate(&self, x: i32, y: i32) {
-        println!("secondary activate {x} {y}");
-    }
-
-
-    #[dbus_interface(signal)]
-    async fn new_attention_icon(ctx: &SignalContext<'_>) -> zbus::Result<()> {}
-
-    #[dbus_interface(signal)]
-    async fn new_icon(ctx: &SignalContext<'_>) -> zbus::Result<()> {}
-
-    #[dbus_interface(signal)]
-    async fn new_overlay_icon(ctx: &SignalContext<'_>) -> zbus::Result<()> {}
-
-    #[dbus_interface(signal)]
-    async fn new_status(ctx: &SignalContext<'_>, status: &str) -> zbus::Result<()> {}
-
-    #[dbus_interface(signal)]
-    async fn new_title(ctx: &SignalContext<'_>) -> zbus::Result<()> {}
-
-    #[dbus_interface(signal)]
-    async fn new_tool_tip(ctx: &SignalContext<'_>) -> zbus::Result<()> {}
-
-    #[dbus_interface(property)]
-    fn attention_icon_name(&self) -> String {
-        Default::default()
-    }
-
-    #[dbus_interface(property)]
-    fn attention_icon_pixmap(&self) -> Vec<(i32, i32, Vec<u8>)> {
-        Default::default()
-    }
-
-    #[dbus_interface(property)]
-    fn attention_movie_name(&self) -> String {
-        Default::default()
-    }
-
-    #[dbus_interface(property)]
-    fn category(&self) -> String {
-        String::from("ApplicationStatus")
-    }
-
-    #[dbus_interface(property)]
-    fn icon_name(&self) -> String {
-        String::from("help-about")
-    }
-
-    #[dbus_interface(property)]
-    fn icon_pixmap(&self) -> Vec<(i32, i32, Vec<u8>)> {
-        Default::default()
-    }
-
-    #[dbus_interface(property)]
-    fn icon_theme_path(&self) -> String {
-        Default::default()
-    }
-
-    #[dbus_interface(property)]
-    fn id(&self) -> String {
-        String::from("betrayer")
-    }
-
-    #[dbus_interface(property)]
-    fn item_is_menu(&self) -> bool {
-        false
-    }
-
-    #[dbus_interface(property)]
-    fn menu(&self) -> OwnedObjectPath {
-        ObjectPath::from_str_unchecked(MENU_PATH).into()
-    }
-
-    #[dbus_interface(property)]
-    fn overlay_icon_name(&self) -> String {
-        Default::default()
-    }
-
-    #[dbus_interface(property)]
-    fn overlay_icon_pixmap(&self) -> Vec<(i32, i32, Vec<u8>)> {
-        Default::default()
-    }
-
-    #[dbus_interface(property)]
-    fn status(&self) -> String {
-        String::from("Active")
-    }
-
-    #[dbus_interface(property)]
-    fn title(&self) -> String {
-        String::from("CHECKED!")
-    }
-
-    #[dbus_interface(property)]
-    fn tool_tip(&self) -> (String, Vec<(i32, i32, Vec<u8>)>, String, String) {
-        Default::default()
-    }
-
-    #[dbus_interface(property)]
-    fn window_id(&self) -> i32 {
-        0
-    }
-}
-
 
 #[dbus_proxy(interface = "org.kde.StatusNotifierWatcher", assume_defaults = true)]
 trait StatusNotifierWatcher {
@@ -233,7 +160,6 @@ trait StatusNotifierWatcher {
     #[dbus_proxy(property)]
     fn registered_status_notifier_items(&self) -> zbus::Result<Vec<String>>;
 }
-
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct NativeIcon;
