@@ -1,42 +1,57 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+use parking_lot::Mutex;
 use zbus::{dbus_interface, SignalContext};
 use zbus::zvariant::{ObjectPath, OwnedObjectPath};
-use crate::platform::linux::MENU_PATH;
+use crate::platform::linux::{MENU_PATH, TrayCallback};
+use crate::{ClickType, TrayEvent};
 
-pub struct StatusNotifierItem {
-    tooltip: String
+pub struct StatusNotifierItem<T> {
+    first_activate: AtomicBool,
+    tooltip: Mutex<String>,
+    callback: TrayCallback<T>
 }
 
-impl StatusNotifierItem {
-    pub fn new(tooltip: String) -> Self {
+impl<T> StatusNotifierItem<T> {
+    pub fn new(tooltip: String, callback: TrayCallback<T>) -> Self {
         Self {
-            tooltip,
+            first_activate: AtomicBool::new(true),
+            tooltip: Mutex::new(tooltip),
+            callback,
         }
     }
 
-    pub async fn update_tooltip(&mut self, tooltip: String, signal_context: &SignalContext<'_>) -> zbus::Result<()> {
-        self.tooltip = tooltip;
+}
+
+impl<T: Send + 'static>  StatusNotifierItem<T> {
+    pub async fn update_tooltip(&self, tooltip: String, signal_context: &SignalContext<'_>) -> zbus::Result<()> {
+        *self.tooltip.lock() = tooltip;
         Self::new_tool_tip(signal_context).await?;
         Ok(())
     }
 }
 
 #[dbus_interface(name = "org.kde.StatusNotifierItem")]
-impl StatusNotifierItem {
+impl<T: Send + 'static> StatusNotifierItem<T> {
 
-    fn activate(&self, x: i32, y: i32) {
-        println!("activate {x} {y}");
+    fn activate(&self, _x: i32, _y: i32) {
+        //skipping the first activation, which triggers the construction of the menu
+        //after that every activation appears to be a double click
+        let first = self.first_activate.swap(false, Ordering::SeqCst);
+        if !first {
+            (self.callback.lock())(TrayEvent::Tray(ClickType::Double))
+        }
     }
 
-    fn context_menu(&self, x: i32, y: i32) {
-        println!("context menu {x} {y}");
+    fn context_menu(&self, _x: i32, _y: i32) {
+        //println!("context menu {x} {y}");
     }
 
-    fn scroll(&self, delta: i32, orientation: &str) {
-        println!("scroll {delta} {orientation}");
+    fn scroll(&self, _delta: i32, _orientation: &str) {
+        //println!("scroll {delta} {orientation}");
     }
 
-    fn secondary_activate(&self, x: i32, y: i32) {
-        println!("secondary activate {x} {y}");
+    fn secondary_activate(&self, _x: i32, _y: i32) {
+        //println!("secondary activate {x} {y}");
     }
 
 
@@ -130,7 +145,7 @@ impl StatusNotifierItem {
 
     #[dbus_interface(property)]
     fn tool_tip(&self) -> (String, Vec<(i32, i32, Vec<u8>)>, String, String) {
-        (String::new(), Vec::new(), self.tooltip.clone(), String::new())
+        (String::new(), Vec::new(), self.tooltip.lock().clone(), String::new())
     }
 
     #[dbus_interface(property)]

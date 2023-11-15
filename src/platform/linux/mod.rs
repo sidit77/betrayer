@@ -1,8 +1,10 @@
 mod menu;
 mod item;
 
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use flume::Sender;
+use parking_lot::Mutex;
 use zbus::{ConnectionBuilder, dbus_proxy, Task};
 use crate::error::{ErrorSource, TrayResult};
 use crate::{Menu, TrayEvent, TrayIconBuilder};
@@ -17,6 +19,8 @@ enum TrayUpdate<T> {
     Menu(Menu<T>),
     Tooltip(String)
 }
+
+pub type TrayCallback<T> = Arc<Mutex<dyn FnMut(TrayEvent<T>) + Send + 'static>>;
 
 pub struct NativeTrayIcon<T> {
     //_signal: Vec<T>,
@@ -36,12 +40,16 @@ impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
             COUNTER.fetch_add(1, Ordering::AcqRel)
         );
 
+        let callback = Arc::new(Mutex::new(callback));
+
         let conn = ConnectionBuilder::session()?
             .name(name.clone())?
             .serve_at(ITEM_PATH, StatusNotifierItem::new(
-                builder.tooltip.unwrap_or_default()))?
-            .serve_at(MENU_PATH, DBusMenu::new(builder.menu
-                .unwrap_or_else(Menu::empty), callback))?
+                builder.tooltip.unwrap_or_default(),
+                callback.clone()))?
+            .serve_at(MENU_PATH, DBusMenu::new(
+                builder.menu.unwrap_or_else(Menu::empty),
+                callback))?
             .internal_executor(true)
             .build()
             .await?;
@@ -64,31 +72,15 @@ impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
                         TrayUpdate::Tooltip(tooltip) => {
                             let iface = connection
                                 .object_server()
-                                .interface::<_, StatusNotifierItem>(ITEM_PATH)
+                                .interface::<_, StatusNotifierItem<T>>(ITEM_PATH)
                                 .await.unwrap();
-                            let mut iref = iface.get_mut().await;
+                            let iref = iface.get().await;
                             iref.update_tooltip(tooltip, iface.signal_context()).await.unwrap();
                         }
                     }
                 }
             }, "event receiver")
         };
-        //let _ = sender.send(TrayUpdate::Menu(Menu::empty()));
-        //{
-        //    let executor = conn.executor().clone();
-        //    std::thread::Builder::new()
-        //        .name("zbus::Connection executor".into())
-        //        .spawn(move || {
-        //            println!("Exec start");
-        //            async_io::block_on(async move {
-        //                // Run as long as there is a task to run.
-        //                while !executor.is_empty() {
-        //                    executor.tick().await;
-        //                }
-        //            });
-        //            println!("Exec end");
-        //        }).unwrap();
-        //}
 
         let proxy = StatusNotifierWatcherProxy::builder(&conn)
             .path("/StatusNotifierWatcher")?

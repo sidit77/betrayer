@@ -3,7 +3,8 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use parking_lot::Mutex;
 use zbus::{dbus_interface, SignalContext};
 use zbus::zvariant::{OwnedValue, Str, Value};
-use crate::{Menu, MenuItem, TrayEvent};
+use crate::{ClickType, Menu, MenuItem, TrayEvent};
+use crate::platform::linux::TrayCallback;
 
 #[derive(Clone)]
 struct MenuEntry<T> {
@@ -25,19 +26,18 @@ impl<T> MenuEntry<T> {
 pub struct DBusMenu<T> {
     revision: AtomicU32,
     entries: Mutex<Vec<MenuEntry<T>>>,
-    callback: Mutex<Box<dyn FnMut(TrayEvent<T>) + Send + 'static>>
+    callback: TrayCallback<T>
 }
 
 impl<T> DBusMenu<T> {
-    pub fn new<F>(menu: Menu<T>, callback: F) -> Self 
-        where F: FnMut(TrayEvent<T>) + Send + 'static
+    pub fn new(menu: Menu<T>, callback: TrayCallback<T>) -> Self
     {
 
         let entries = build_menu(menu);
         Self {
             revision: AtomicU32::new(0),
             entries: Mutex::new(entries),
-            callback: Mutex::new(Box::new(callback)),
+            callback,
         }
     }
 
@@ -219,15 +219,21 @@ impl<T: Clone + Send + 'static> DBusMenu<T> {
 
     fn event(&self, id: i32, event_id: &str, data: Value<'_>, timestamp: u32) {
         log::trace!("event({}, {}, {:?}, {})", id, event_id, data, timestamp);
-        if event_id == "clicked" {
-            let signal = self
-                .entries
-                .lock()
-                .get(id as usize)
-                .and_then(|e|e.signal.clone());
-            if let Some(signal) = signal {
-                (self.callback.lock())(TrayEvent::Menu(signal));
+        match event_id {
+            "clicked" => {
+                let signal = self
+                    .entries
+                    .lock()
+                    .get(id as usize)
+                    .and_then(|e|e.signal.clone());
+                if let Some(signal) = signal {
+                    (self.callback.lock())(TrayEvent::Menu(signal));
+                }
+            },
+            "opened" if id == 0 => {
+                (self.callback.lock())(TrayEvent::Tray(ClickType::Left));
             }
+            _ => {}
         }
     }
 

@@ -33,18 +33,20 @@ fn main() -> Result<()> {
     event_loop.set_control_flow(ControlFlow::Wait);
     event_loop.run(|event, evtl| {
         match event {
-            Event::UserEvent(TrayEvent::Menu(signal)) => {
-                log::info!("Signal: {:?}", signal);
-                match signal {
-                    Signal::Profile(i) => {
-                        if selected != i {
-                            selected = i;
-                            tray.set_tooltip(format!("Active Profile: {selected}"));
-                            tray.set_menu(build_menu(selected));
-                        }
-                    },
-                    Signal::Open => {}
-                    Signal::Quit => evtl.exit()
+            Event::UserEvent(event) => {
+                log::info!("tray event: {:?}", event);
+                if let TrayEvent::Menu(signal) = event {
+                    match signal {
+                        Signal::Profile(i) => {
+                            if selected != i {
+                                selected = i;
+                                tray.set_tooltip(format!("Active Profile: {selected}"));
+                                tray.set_menu(build_menu(selected));
+                            }
+                        },
+                        Signal::Open => {}
+                        Signal::Quit => evtl.exit()
+                    }
                 }
             }
             _ => {}
