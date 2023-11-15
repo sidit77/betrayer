@@ -124,7 +124,7 @@ impl StatusNotifierItem {
 
     #[dbus_interface(property)]
     fn tool_tip(&self) -> (String, Vec<(i32, i32, Vec<u8>)>, String, String) {
-        Default::default()
+        (String::new(), Vec::new(), self.tooltip.clone(), String::new())
     }
 
     #[dbus_interface(property)]
