@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::mem::swap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use parking_lot::Mutex;
 use zbus::{dbus_interface, SignalContext};
@@ -45,10 +46,12 @@ impl<T> DBusMenu<T> {
 
 impl<T: Clone + Send + 'static> DBusMenu<T> {
     pub async fn update_menu(&self, menu: Menu<T>, signal_context: &SignalContext<'_>) -> zbus::Result<()> {
-        let entries = build_menu(menu);
-        let old_entries = self.entries.lock().clone();
-        let (layout, updated, removed) = generate_diff(&entries, &old_entries);
-        *self.entries.lock() = entries;
+        let (layout, updated, removed) = {
+            let mut current_entries = self.entries.lock();
+            let mut entries = build_menu(menu);
+            swap(&mut entries, &mut current_entries);
+            generate_diff(&current_entries, &entries)
+        };
         if let Some(parent) = layout {
             let revision = self.revision.fetch_add(1, Ordering::SeqCst) + 1;
             log::trace!("Sending layout update signal (parent: {parent}, revision: {revision})");
