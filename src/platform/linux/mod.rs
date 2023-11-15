@@ -10,10 +10,12 @@ use crate::platform::linux::item::StatusNotifierItem;
 use crate::platform::linux::menu::DBusMenu;
 
 static MENU_PATH: &'static str = "/MenuBar";
+static ITEM_PATH: &'static str = "/StatusNotifierItem";
 static COUNTER: AtomicUsize = AtomicUsize::new(1);
 
 enum TrayUpdate<T> {
-    Menu(Menu<T>)
+    Menu(Menu<T>),
+    Tooltip(String)
 }
 
 pub struct NativeTrayIcon<T> {
@@ -36,7 +38,7 @@ impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
 
         let conn = ConnectionBuilder::session()?
             .name(name.clone())?
-            .serve_at("/StatusNotifierItem", StatusNotifierItem::new(
+            .serve_at(ITEM_PATH, StatusNotifierItem::new(
                 builder.tooltip.unwrap_or_default()))?
             .serve_at(MENU_PATH, DBusMenu::new(builder.menu
                 .unwrap_or_else(Menu::empty), callback))?
@@ -58,6 +60,14 @@ impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
                                 .await.unwrap();
                             let iref = iface.get().await;
                             iref.update_menu(menu, iface.signal_context()).await.unwrap();
+                        },
+                        TrayUpdate::Tooltip(tooltip) => {
+                            let iface = connection
+                                .object_server()
+                                .interface::<_, StatusNotifierItem>(ITEM_PATH)
+                                .await.unwrap();
+                            let mut iref = iface.get_mut().await;
+                            iref.update_tooltip(tooltip, iface.signal_context()).await.unwrap();
                         }
                     }
                 }
@@ -103,31 +113,19 @@ impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
         async_io::block_on(Self::new_async(builder, callback))
     }
 
-
-    pub fn set_menu(&self, menu: Option<Menu<T>>) {
-        ////TODO spawn this on the custom executor
-        //async_io::block_on(self.set_menu_async(menu))
-        self.sender
-            .send(TrayUpdate::Menu(menu.unwrap_or_else(Menu::empty)))
-            .unwrap_or_else(|err| log::warn!("Failed to send update: {err}"));
-    }
-
-    //pub async fn set_menu_async(&self, menu: Option<Menu<T>>) {
-    //    let iref = self.connection
-    //        .object_server()
-    //        .interface::<_, DBusMenu<T>>(MENU_PATH)
-    //        .await
-    //        .unwrap();
-    //    let iface = iref.get().await;
-    //    iface.update_menu(menu.unwrap_or_else(Menu::empty), iref.signal_context())
-    //        .await
-    //        .unwrap();
-    //}
 }
 
 impl<T> NativeTrayIcon<T> {
-    pub fn set_tooltip(&self, _tooltip: Option<String>) {
+    pub fn set_tooltip(&self, tooltip: Option<String>) {
+        self.sender
+            .send(TrayUpdate::Tooltip(tooltip.unwrap_or_default()))
+            .unwrap_or_else(|err| log::warn!("Failed to send update: {err}"));
+    }
 
+    pub fn set_menu(&self, menu: Option<Menu<T>>) {
+        self.sender
+            .send(TrayUpdate::Menu(menu.unwrap_or_else(Menu::empty)))
+            .unwrap_or_else(|err| log::warn!("Failed to send update: {err}"));
     }
 
 }

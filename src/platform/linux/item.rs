@@ -12,6 +12,12 @@ impl StatusNotifierItem {
             tooltip,
         }
     }
+
+    pub async fn update_tooltip(&mut self, tooltip: String, signal_context: &SignalContext<'_>) -> zbus::Result<()> {
+        self.tooltip = tooltip;
+        Self::new_tool_tip(signal_context).await?;
+        Ok(())
+    }
 }
 
 #[dbus_interface(name = "org.kde.StatusNotifierItem")]
