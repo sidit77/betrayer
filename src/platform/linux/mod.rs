@@ -7,7 +7,7 @@ use flume::Sender;
 use parking_lot::Mutex;
 use zbus::{ConnectionBuilder, dbus_proxy, Task};
 use crate::error::{ErrorSource, TrayResult};
-use crate::{Menu, TrayEvent, TrayIconBuilder};
+use crate::{Icon, Menu, TrayEvent, TrayIconBuilder};
 use crate::platform::linux::item::StatusNotifierItem;
 use crate::platform::linux::menu::DBusMenu;
 
@@ -17,7 +17,8 @@ static COUNTER: AtomicUsize = AtomicUsize::new(1);
 
 enum TrayUpdate<T> {
     Menu(Menu<T>),
-    Tooltip(String)
+    Tooltip(String),
+    Icon(String)
 }
 
 pub type TrayCallback<T> = Arc<Mutex<dyn FnMut(TrayEvent<T>) + Send + 'static>>;
@@ -45,6 +46,7 @@ impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
         let conn = ConnectionBuilder::session()?
             .name(name.clone())?
             .serve_at(ITEM_PATH, StatusNotifierItem::new(
+                String::from("help-about"),
                 builder.tooltip.unwrap_or_default(),
                 callback.clone()))?
             .serve_at(MENU_PATH, DBusMenu::new(
@@ -76,6 +78,14 @@ impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
                                 .await.unwrap();
                             let iref = iface.get().await;
                             iref.update_tooltip(tooltip, iface.signal_context()).await.unwrap();
+                        }
+                        TrayUpdate::Icon(icon) => {
+                            let iface = connection
+                                .object_server()
+                                .interface::<_, StatusNotifierItem<T>>(ITEM_PATH)
+                                .await.unwrap();
+                            let iref = iface.get().await;
+                            iref.update_icon(icon, iface.signal_context()).await.unwrap();
                         }
                     }
                 }
@@ -117,6 +127,12 @@ impl<T> NativeTrayIcon<T> {
     pub fn set_menu(&self, menu: Option<Menu<T>>) {
         self.sender
             .send(TrayUpdate::Menu(menu.unwrap_or_else(Menu::empty)))
+            .unwrap_or_else(|err| log::warn!("Failed to send update: {err}"));
+    }
+
+    pub fn set_icon(&self, _icon: Option<Icon>) {
+        self.sender
+            .send(TrayUpdate::Icon(String::new()))
             .unwrap_or_else(|err| log::warn!("Failed to send update: {err}"));
     }
 

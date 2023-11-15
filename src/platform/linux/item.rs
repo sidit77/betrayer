@@ -8,14 +8,16 @@ use crate::{ClickType, TrayEvent};
 pub struct StatusNotifierItem<T> {
     first_activate: AtomicBool,
     tooltip: Mutex<String>,
+    icon: Mutex<String>,
     callback: TrayCallback<T>
 }
 
 impl<T> StatusNotifierItem<T> {
-    pub fn new(tooltip: String, callback: TrayCallback<T>) -> Self {
+    pub fn new(icon: String, tooltip: String, callback: TrayCallback<T>) -> Self {
         Self {
             first_activate: AtomicBool::new(true),
             tooltip: Mutex::new(tooltip),
+            icon: Mutex::new(icon),
             callback,
         }
     }
@@ -26,6 +28,12 @@ impl<T: Send + 'static>  StatusNotifierItem<T> {
     pub async fn update_tooltip(&self, tooltip: String, signal_context: &SignalContext<'_>) -> zbus::Result<()> {
         *self.tooltip.lock() = tooltip;
         Self::new_tool_tip(signal_context).await?;
+        Ok(())
+    }
+
+    pub async fn update_icon(&self, icon: String, signal_context: &SignalContext<'_>) -> zbus::Result<()> {
+        *self.icon.lock() = icon;
+        Self::new_icon(signal_context).await?;
         Ok(())
     }
 }
@@ -95,7 +103,7 @@ impl<T: Send + 'static> StatusNotifierItem<T> {
 
     #[dbus_interface(property)]
     fn icon_name(&self) -> String {
-        String::from("help-about")
+        self.icon.lock().clone()
     }
 
     #[dbus_interface(property)]
