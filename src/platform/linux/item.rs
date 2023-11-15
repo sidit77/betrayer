@@ -118,6 +118,7 @@ impl<T: Send + 'static> StatusNotifierItem<T> {
 
     #[dbus_interface(property)]
     fn id(&self) -> String {
+        //TODO How to handle this id?
         String::from("betrayer")
     }
 

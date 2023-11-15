@@ -1,10 +1,13 @@
 mod menu;
 mod item;
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::cell::Cell;
+use std::path::PathBuf;
+use std::sync::{Arc, OnceLock};
+use std::sync::atomic::{AtomicU32, Ordering};
 use flume::Sender;
 use parking_lot::Mutex;
+use png::{BitDepth, ColorType, Encoder};
 use zbus::{ConnectionBuilder, dbus_proxy, Task};
 use crate::error::{ErrorSource, TrayResult};
 use crate::{Icon, Menu, TrayEvent, TrayIconBuilder};
@@ -13,7 +16,7 @@ use crate::platform::linux::menu::DBusMenu;
 
 static MENU_PATH: &'static str = "/MenuBar";
 static ITEM_PATH: &'static str = "/StatusNotifierItem";
-static COUNTER: AtomicUsize = AtomicUsize::new(1);
+static COUNTER: AtomicU32 = AtomicU32::new(1);
 
 enum TrayUpdate<T> {
     Menu(Menu<T>),
@@ -24,10 +27,11 @@ enum TrayUpdate<T> {
 pub type TrayCallback<T> = Arc<Mutex<dyn FnMut(TrayEvent<T>) + Send + 'static>>;
 
 pub struct NativeTrayIcon<T> {
-    //_signal: Vec<T>,
-    //connection: Connection
+    id: (u32, u32),
+    sender: Sender<TrayUpdate<T>>,
+    tmp_icon_file: Cell<Option<TmpFileRaiiHandle>>,
+    tmp_icon_counter: Cell<u32>,
     _update_task: Task<()>,
-    sender: Sender<TrayUpdate<T>>
 }
 
 impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
@@ -35,18 +39,23 @@ impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
     pub async fn new_async<F>(builder: TrayIconBuilder<T>, callback: F) -> TrayResult<Self>
         where F: FnMut(TrayEvent<T>) + Send + 'static
     {
-        let name = format!(
-            "org.kde.StatusNotifierItem-{}-{}",
-            std::process::id(),
-            COUNTER.fetch_add(1, Ordering::AcqRel)
-        );
+        let pid = std::process::id();
+        let id = COUNTER.fetch_add(1, Ordering::AcqRel);
+        let name = format!("org.kde.StatusNotifierItem-{pid}-{id}");
+
+        let mut tmp_icon_counter = 0;
+        let (icon, tmp_icon_path) = builder
+            .icon
+            .map(NativeIcon::from)
+            .map(|icon| icon.write_to_disk((pid, id), &mut tmp_icon_counter))
+            .unzip();
 
         let callback = Arc::new(Mutex::new(callback));
-
+        //"/home/simon/headset-controller/resources/icon.png"
         let conn = ConnectionBuilder::session()?
             .name(name.clone())?
             .serve_at(ITEM_PATH, StatusNotifierItem::new(
-                String::from("help-about"),
+                icon.unwrap_or_default(),
                 builder.tooltip.unwrap_or_default(),
                 callback.clone()))?
             .serve_at(MENU_PATH, DBusMenu::new(
@@ -101,10 +110,11 @@ impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
 
 
         Ok(Self {
-            //_signal: vec![],
-            //connection: conn,
-            _update_task: receiver_task,
+            id: (pid, id),
             sender,
+            tmp_icon_file: Cell::new(tmp_icon_path.flatten()),
+            tmp_icon_counter: Cell::new(tmp_icon_counter),
+            _update_task: receiver_task
         })
 
     }
@@ -130,9 +140,17 @@ impl<T> NativeTrayIcon<T> {
             .unwrap_or_else(|err| log::warn!("Failed to send update: {err}"));
     }
 
-    pub fn set_icon(&self, _icon: Option<Icon>) {
+    #[allow(dead_code)]
+    pub fn set_icon(&self, icon: Option<Icon>) {
+        let mut counter = self.tmp_icon_counter.get();
+        let (icon, tmp_icon_path) = icon
+            .map(NativeIcon::from)
+            .map(|icon| icon.write_to_disk(self.id, &mut counter))
+            .unzip();
+        self.tmp_icon_counter.set(counter);
+        self.tmp_icon_file.set(tmp_icon_path.flatten());
         self.sender
-            .send(TrayUpdate::Icon(String::new()))
+            .send(TrayUpdate::Icon(icon.unwrap_or_default()))
             .unwrap_or_else(|err| log::warn!("Failed to send update: {err}"));
     }
 
@@ -168,14 +186,67 @@ trait StatusNotifierWatcher {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct NativeIcon;
+pub enum NativeIcon {
+    #[allow(dead_code)]
+    Path(String),
+    Pixels(Vec<u8>)
+}
 
 impl NativeIcon {
-    pub fn from_rgba(_rgba: Vec<u8>, _width: u32, _height: u32) -> TrayResult<Self> {
-        Ok(Self)
+
+    pub fn from_rgba(rgba: Vec<u8>, width: u32, height: u32) -> TrayResult<Self> {
+        let mut pixels = Vec::new();
+        let mut encoder = Encoder::new(&mut pixels, width, height);
+        encoder.set_color(ColorType::Rgba);
+        encoder.set_depth(BitDepth::Eight);
+        let mut writer = encoder.write_header().unwrap();
+        writer.write_image_data(&rgba).unwrap();
+        writer.finish().unwrap();
+        Ok(Self::Pixels(pixels))
+    }
+
+    fn write_to_disk(&self, id: (u32, u32), counter: &mut u32) -> (String, Option<TmpFileRaiiHandle>) {
+        match self {
+            NativeIcon::Path(path) => (path.clone(), None),
+            NativeIcon::Pixels(pixels) => {
+                let tmp_path = get_tmp_icon_path(id, *counter);
+                *counter += 1;
+                //std::fs::create_dir_all(&tmp_path).unwrap();
+                std::fs::write(&tmp_path, pixels).unwrap();
+                (tmp_path.clone(), Some(TmpFileRaiiHandle(tmp_path)))
+            }
+        }
     }
 }
 
+struct TmpFileRaiiHandle(String);
+
+impl Drop for TmpFileRaiiHandle {
+    fn drop(&mut self) {
+        let path = self.0.as_str();
+        std::fs::remove_file(path)
+            .unwrap_or_else(|err| log::warn!("Failed to clean up icon file at {path}: {err}"));
+    }
+}
+
+fn get_tmp_icon_path((pid, id): (u32, u32), counter: u32) -> String {
+    static BASE_DIR: OnceLock<String> = OnceLock::new();
+
+    let base = BASE_DIR.get_or_init(|| {
+        let base = std::env::var("XDG_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .ok()
+            .unwrap_or_else(std::env::temp_dir)
+            .join("betrayer");
+        std::fs::create_dir_all(&base)
+            .expect("Failed to create icon tmp dir");
+        log::trace!("Using {base:?} as tmp dir for icons");
+        base.to_str()
+            .expect("Non UTF-8 paths are currently not supported")
+            .to_string()
+    });
+    format!("{base}/icon-{pid}-{id}-{counter}.png")
+}
 
 pub type PlatformError = zbus::Error;
 impl From<PlatformError> for ErrorSource {
