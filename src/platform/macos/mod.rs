@@ -1,15 +1,22 @@
 mod menu;
+mod callback;
 
+use std::cell::Cell;
 use std::marker::PhantomData;
+use std::rc::Rc;
 use icrate::AppKit::{NSApplication, NSStatusBar, NSStatusItem, NSVariableStatusItemLength};
 use icrate::Foundation::NSString;
 use objc2::rc::Id;
 use crate::error::TrayResult;
 use crate::{Menu, TrayEvent, TrayIconBuilder};
+use crate::platform::macos::callback::SystemTrayCallback;
 use crate::platform::macos::menu::construct_native_menu;
+use crate::utils::OptionCellExt;
 
 pub struct NativeTrayIcon<T> {
     status_item: Id<NSStatusItem>,
+    signal_map: Rc<Cell<Option<Vec<T>>>>,
+    callback: Id<SystemTrayCallback>,
     _marker: PhantomData<T>
 }
 
@@ -23,16 +30,28 @@ impl<T: Clone + 'static> NativeTrayIcon<T> {
             let status_bar = NSStatusBar::systemStatusBar();
             let status_item = status_bar.statusItemWithLength(NSVariableStatusItemLength);
 
+            let signal_map = Rc::new(Cell::new(None));
+
+            let callback = {
+                let signal_map = signal_map.clone();
+                SystemTrayCallback::new2(move || {
+                    signal_map.with(|map: &mut Vec<T> | println!("signals: {}", map.len()));
+                    println!("Click");
+                })
+            };
+
             if let Some(button) = status_item.button() {
                 button.setTitle(&NSString::from_str("TEST BUTTON"));
             }
 
-            if let Some(menu) = builder.menu.map(construct_native_menu) {
+            if let Some(menu) = builder.menu.map(|menu| construct_native_menu(menu, &callback)) {
                 status_item.setMenu(Some(&menu));
             }
 
             Ok(Self {
                 status_item,
+                signal_map,
+                callback,
                 _marker: Default::default(),
             })
         }
