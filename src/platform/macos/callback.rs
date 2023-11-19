@@ -5,13 +5,14 @@ use icrate::AppKit::NSMenuItem;
 use objc2::{ClassType, declare_class, msg_send_id, msg_send, sel};
 use objc2::runtime::{NSObject, Sel};
 use objc2::declare::{Ivar, IvarDrop};
+use objc2::ffi::NSInteger;
 use objc2::mutability::InteriorMutable;
 use objc2::rc::Id;
 
 declare_class!(
     #[derive(Debug)]
     pub struct SystemTrayCallback {
-        callback: IvarDrop<Box<RcBlock<(*mut NSMenuItem,), ()>>, "_callback">,
+        callback: IvarDrop<Box<RcBlock<(NSInteger,), ()>>, "_callback">,
     }
 
     mod ivars;
@@ -24,7 +25,7 @@ declare_class!(
 
     unsafe impl SystemTrayCallback {
         #[method(initWithCallback:)]
-        unsafe fn init(this: *mut Self, callback: *mut Block<(*mut NSMenuItem,), ()>) -> Option<NonNull<Self>> {
+        unsafe fn init(this: *mut Self, callback: *mut Block<(NSInteger,), ()>) -> Option<NonNull<Self>> {
             let this: Option<&mut Self> = msg_send![super(this), init];
             let Some(this) = this else {
                 return None;
@@ -35,26 +36,26 @@ declare_class!(
             Some(NonNull::from(this))
         }
 
-        #[method(call:)]
-        unsafe fn call(&self, sender: *mut NSMenuItem) {
-            self.callback.call((sender,));
+        #[method(call_menu_item:)]
+        unsafe fn call_menu_item(&self, sender: *mut NSMenuItem) {
+            if let Some(sender) = sender.as_ref() {
+                self.callback.call((sender.tag(),));
+            }
         }
     }
 );
 
 impl SystemTrayCallback {
-    fn new(callback: &Block<(*mut NSMenuItem,), ()>) -> Id<Self> {
+    fn from_block(callback: &Block<(NSInteger,), ()>) -> Id<Self> {
         unsafe { msg_send_id![Self::alloc(), initWithCallback: callback] }
     }
 
-    pub fn new2<F: Fn() + 'static>(callback: F) -> Id<Self> {
-        let callback_block = ConcreteBlock::new(move |item: *mut NSMenuItem| {
-            callback();
-        }).copy();
-        Self::new(&*callback_block)
+    pub fn new<F: Fn(NSInteger) + 'static>(callback: F) -> Id<Self> {
+        let callback_block = ConcreteBlock::new(callback).copy();
+        Self::from_block(&*callback_block)
     }
 
     pub fn menu_item_selector() -> Sel {
-        sel!(call:)
+        sel!(call_menu_item:)
     }
 }

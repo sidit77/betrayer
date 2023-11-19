@@ -1,7 +1,7 @@
 mod menu;
 mod callback;
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::marker::PhantomData;
 use std::rc::Rc;
 use icrate::AppKit::{NSApplication, NSStatusBar, NSStatusItem, NSVariableStatusItemLength};
@@ -21,7 +21,7 @@ pub struct NativeTrayIcon<T> {
 }
 
 impl<T: Clone + 'static> NativeTrayIcon<T> {
-    pub fn new<F>(builder: TrayIconBuilder<T>, _callback: F) -> TrayResult<Self>
+    pub fn new<F>(builder: TrayIconBuilder<T>, callback: F) -> TrayResult<Self>
         where F: FnMut(TrayEvent<T>) + Send + 'static
     {
         unsafe {
@@ -34,9 +34,16 @@ impl<T: Clone + 'static> NativeTrayIcon<T> {
 
             let callback = {
                 let signal_map = signal_map.clone();
-                SystemTrayCallback::new2(move || {
-                    signal_map.with(|map: &mut Vec<T> | println!("signals: {}", map.len()));
-                    println!("Click");
+                let callback = RefCell::new(callback);
+                SystemTrayCallback::new(move |tag| {
+                    let signal = signal_map
+                        .with(|map: &mut Vec<T> | map.get(tag as usize).cloned())
+                        .flatten();
+                    if let Some(signal) = signal {
+                        callback.borrow_mut()(TrayEvent::Menu(signal));
+                    } else {
+                        log::debug!("Failed to get signal for tag {}", tag);
+                    }
                 })
             };
 
@@ -44,8 +51,9 @@ impl<T: Clone + 'static> NativeTrayIcon<T> {
                 button.setTitle(&NSString::from_str("TEST BUTTON"));
             }
 
-            if let Some(menu) = builder.menu.map(|menu| construct_native_menu(menu, &callback)) {
+            if let Some((menu, map)) = builder.menu.map(|menu| construct_native_menu(menu, &callback)) {
                 status_item.setMenu(Some(&menu));
+                signal_map.set(Some(map));
             }
 
             Ok(Self {
