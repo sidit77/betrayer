@@ -21,7 +21,7 @@ pub unsafe fn build_menu_item<T>(item: MenuItem<T>, callback: &SystemTrayCallbac
                 false => NSControlStateValueOff
             });
             button.setTarget(Some(callback));
-            button.setAction(Some(SystemTrayCallback::menu_item_selector()));
+            button.setAction(Some(SystemTrayCallback::selector()));
             button.setTag(signal_map.len() as NSInteger);
             signal_map.push(signal);
             button

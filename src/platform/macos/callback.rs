@@ -1,7 +1,7 @@
 use std::ptr::NonNull;
 
 use block2::{Block, ConcreteBlock, RcBlock};
-use icrate::AppKit::NSMenuItem;
+use icrate::AppKit::NSControl;
 use objc2::{ClassType, declare_class, msg_send_id, msg_send, sel};
 use objc2::runtime::{NSObject, Sel};
 use objc2::declare::{Ivar, IvarDrop};
@@ -36,8 +36,8 @@ declare_class!(
             Some(NonNull::from(this))
         }
 
-        #[method(call_menu_item:)]
-        unsafe fn call_menu_item(&self, sender: *mut NSMenuItem) {
+        #[method(call_control:)]
+        unsafe fn call_control(&self, sender: *mut NSControl) {
             if let Some(sender) = sender.as_ref() {
                 self.callback.call((sender.tag(),));
             }
@@ -55,7 +55,7 @@ impl SystemTrayCallback {
         Self::from_block(&*callback_block)
     }
 
-    pub fn menu_item_selector() -> Sel {
-        sel!(call_menu_item:)
+    pub fn selector() -> Sel {
+        sel!(call_control:)
     }
 }
