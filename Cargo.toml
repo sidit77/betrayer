@@ -10,7 +10,7 @@ log = "0.4"
 
 [target."cfg(target_os = \"windows\")".dependencies]
 once_cell = "1"
-windows = { version = "0.51", features = [
+windows = { version = "0.52", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Shell",

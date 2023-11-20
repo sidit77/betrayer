@@ -18,7 +18,7 @@ impl NativeMenu {
         unsafe {
             GetCursorPos(&mut cursor)?;
             SetForegroundWindow(hwnd).ok()?;
-            TrackPopupMenu(self.hmenu, TPM_BOTTOMALIGN | TPM_LEFTALIGN, cursor.x, cursor.y, 0, hwnd, None)?;
+            TrackPopupMenu(self.hmenu, TPM_BOTTOMALIGN | TPM_LEFTALIGN, cursor.x, cursor.y, 0, hwnd, None).ok()?;
         }
         Ok(())
     }
