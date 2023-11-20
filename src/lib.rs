@@ -118,7 +118,17 @@ impl<T> MenuItem<T> {
         Self::Separator
     }
 
-    pub fn button<S>(name: S, signal: T, checked: bool) -> Self
+    pub fn button<S>(name: S, signal: T) -> Self
+        where S: ToString
+    {
+        Self::Button {
+            name: name.to_string(),
+            signal,
+            checked: false,
+        }
+    }
+
+    pub fn check_button<S>(name: S, signal: T, checked: bool) -> Self
         where S: ToString
     {
         Self::Button {

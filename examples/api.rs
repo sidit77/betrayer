@@ -58,9 +58,9 @@ fn main() -> Result<()> {
 fn build_menu(selected: u32) -> Menu<Signal> {
     Menu::new([
         MenuItem::menu("Profiles", (0..5)
-            .map(|i| MenuItem::button(format!("Profile {}", i + 1), Signal::Profile(i),selected == i))),
+            .map(|i| MenuItem::check_button(format!("Profile {}", i + 1), Signal::Profile(i),selected == i))),
         MenuItem::separator(),
-        MenuItem::button("Open", Signal::Open, false),
-        MenuItem::button("Quit", Signal::Quit, false)
+        MenuItem::button("Open", Signal::Open),
+        MenuItem::button("Quit", Signal::Quit)
     ])
 }
