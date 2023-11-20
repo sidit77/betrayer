@@ -205,6 +205,9 @@ impl NativeIcon {
         Ok(Self::Pixels(pixels))
     }
 
+    pub fn from_png_bytes(bytes: &[u8]) -> TrayResult<Self> {
+        Ok(Self::Pixels(bytes.to_vec()))
+    }
     fn write_to_disk(&self, id: (u32, u32), counter: &mut u32) -> (String, Option<TmpFileRaiiHandle>) {
         match self {
             NativeIcon::Path(path) => (path.clone(), None),

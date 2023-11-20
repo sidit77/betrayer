@@ -148,6 +148,11 @@ impl Icon {
         Ok(Icon(NativeIcon::from_rgba(rgba, width, height)?))
     }
 
+    #[cfg(target_os = "linux")]
+    pub fn from_png_bytes(bytes: &[u8]) -> TrayResult<Self> {
+        Ok(Icon(NativeIcon::from_png_bytes(bytes)?))
+    }
+
     #[cfg(target_os = "windows")]
     pub fn from_resource(resource_id: u16, size: Option<(u32, u32)>) -> TrayResult<Self> {
         Ok(Icon(NativeIcon::from_resource(resource_id, size)?))
