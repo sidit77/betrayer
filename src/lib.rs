@@ -1,9 +1,10 @@
-use crate::error::{TrayError, TrayResult};
-use crate::platform::{NativeIcon, NativeTrayIcon};
-
 mod platform;
 mod error;
 mod utils;
+
+use platform::{NativeIcon, NativeTrayIcon};
+
+pub use error::{TrayResult, TrayError};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct TrayIconBuilder<T = ()> {
