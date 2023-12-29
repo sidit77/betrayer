@@ -4,6 +4,9 @@ mod platform;
 mod error;
 mod utils;
 
+#[cfg(feature = "winit")]
+pub mod winit;
+
 use platform::{NativeIcon, NativeTrayIcon};
 
 pub use error::{TrayResult, TrayError};
