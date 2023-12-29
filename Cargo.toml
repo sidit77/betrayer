@@ -2,6 +2,14 @@
 name = "betrayer"
 version = "0.1.0"
 edition = "2021"
+authors = ["sidit77"]
+license = "MIT"
+description = "Simple tray icons that integrate well with winit"
+repository = "https://github.com/sidit77/betrayer"
+documentation = "https://docs.rs/betrayer"
+readme = "Readme.md"
+keywords = ["Tray", "Icon", "Menu"]
+categories = ["api-bindings", "gui", "os"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
