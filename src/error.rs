@@ -31,7 +31,7 @@ impl TrayError {
 
 impl Debug for TrayError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "HidError: {:?}\n\tat {}", self.source, self.location)
+        write!(f, "TrayError: {:?}\n\tat {}", self.source, self.location)
     }
 }
 
