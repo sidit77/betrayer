@@ -9,7 +9,7 @@ pub mod winit;
 
 use platform::{NativeIcon, NativeTrayIcon};
 
-pub use error::{TrayResult, TrayError};
+pub use error::{TrayResult, TrayError, ErrorSource};
 
 /// Builder struct for a tray icon
 #[derive(Debug, Clone, Eq, PartialEq)]

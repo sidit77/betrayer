@@ -27,6 +27,14 @@ impl TrayError {
         }
     }
 
+    pub fn source(&self) -> &ErrorSource {
+        &self.source
+    }
+
+    pub fn location(&self) -> &'static Location<'static> {
+        &self.location
+    }
+
 }
 
 impl Debug for TrayError {
