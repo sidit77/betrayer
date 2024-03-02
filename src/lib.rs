@@ -70,6 +70,10 @@ impl<T> TrayIcon<T> {
     pub fn set_tooltip<S: ToString>(&self, tooltip: impl Into<Option<S>>) {
         self.0.set_tooltip(tooltip.into().map(|s| s.to_string()))
     }
+
+    pub fn set_icon(&self, icon: impl Into<Option<Icon>>) {
+        self.0.set_icon(icon.into())
+    }
 }
 
 impl<T: 'static> TrayIcon<T> {

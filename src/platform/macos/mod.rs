@@ -7,7 +7,7 @@ use icrate::AppKit::{NSApplication, NSStatusBar, NSStatusItem, NSVariableStatusI
 use icrate::Foundation::NSString;
 use objc2::rc::Id;
 use crate::error::TrayResult;
-use crate::{ClickType, Menu, TrayEvent, TrayIconBuilder};
+use crate::{ClickType, Menu, TrayEvent, TrayIconBuilder, Icon};
 use crate::platform::macos::callback::SystemTrayCallback;
 use crate::platform::macos::menu::construct_native_menu;
 use crate::utils::OptionCellExt;
@@ -84,6 +84,10 @@ impl<T> Drop for NativeTrayIcon<T> {
 
 impl<T> NativeTrayIcon<T> {
     pub fn set_tooltip(&self, _tooltip: Option<String>) {
+
+    }
+
+    pub fn set_icon(&self, _icon: Option<Icon>) {
 
     }
 

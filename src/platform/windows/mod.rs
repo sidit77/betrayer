@@ -14,9 +14,9 @@ use windows::core::{PCWSTR, w};
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::SystemServices::IMAGE_DOS_HEADER;
 use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
-use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, DefWindowProcW, DestroyWindow, HMENU, HWND_MESSAGE, RegisterClassW, RegisterWindowMessageW, WINDOW_EX_STYLE, WINDOW_STYLE, WM_COMMAND, WM_DESTROY, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW};
+use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, DefWindowProcW, DestroyWindow, HICON, HMENU, HWND_MESSAGE, RegisterClassW, RegisterWindowMessageW, WINDOW_EX_STYLE, WINDOW_STYLE, WM_COMMAND, WM_DESTROY, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW};
 use crate::platform::windows::menu::NativeMenu;
-use crate::{ClickType, ensure, Menu, TrayEvent, TrayIconBuilder};
+use crate::{ClickType, ensure, Icon, Menu, TrayEvent, TrayIconBuilder};
 use crate::error::{ErrorSource, TrayError, TrayResult};
 use crate::platform::windows::tray::{DataAction, TrayIconData};
 use crate::utils::OptionCellExt;
@@ -129,6 +129,14 @@ impl<T> NativeTrayIcon<T> {
             .apply(self.hwnd, self.tray_id, DataAction::Modify)
             .unwrap();
         self.shared.tooltip.set(tooltip)
+    }
+
+    pub fn set_icon(&self, icon: Option<Icon>) {
+        TrayIconData::default()
+            .with_icon(icon.as_ref().map(|i| i.0.handle()).unwrap_or(HICON::default()))
+            .apply(self.hwnd, self.tray_id, DataAction::Modify)
+            .unwrap();
+        self.shared.icon.set(icon.map(|i| i.0))
     }
 
 }

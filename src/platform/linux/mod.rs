@@ -140,7 +140,6 @@ impl<T> NativeTrayIcon<T> {
             .unwrap_or_else(|err| log::warn!("Failed to send update: {err}"));
     }
 
-    #[allow(dead_code)]
     pub fn set_icon(&self, icon: Option<Icon>) {
         let mut counter = self.tmp_icon_counter.get();
         let (icon, tmp_icon_path) = icon
