@@ -135,18 +135,22 @@ impl<T> Menu<T> {
         Self {
             items: Vec::new(),
         }
-    }    
-    
+    }
+
 }
 
 /// Various menu items that can be added to a [Menu]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum MenuItem<T> {
     Separator,
-    Button {
+    CheckButton {
         name: String,
         signal: T,
         checked: bool
+    },
+    Button {
+        name: String,
+        signal: T,
     },
     Menu {
         name: String,
@@ -168,7 +172,6 @@ impl<T> MenuItem<T> {
         Self::Button {
             name: name.to_string(),
             signal,
-            checked: false,
         }
     }
 
@@ -176,7 +179,7 @@ impl<T> MenuItem<T> {
     pub fn check_button<S>(name: S, signal: T, checked: bool) -> Self
         where S: ToString
     {
-        Self::Button {
+        Self::CheckButton {
             name: name.to_string(),
             signal,
             checked,

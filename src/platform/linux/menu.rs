@@ -42,7 +42,7 @@ impl<T> DBusMenu<T> {
         }
     }
 
-} 
+}
 
 impl<T: Clone + Send + 'static> DBusMenu<T> {
     pub async fn update_menu(&self, menu: Menu<T>, signal_context: &SignalContext<'_>) -> zbus::Result<()> {
@@ -86,12 +86,21 @@ fn build_menu<T>(menu: Menu<T>) -> Vec<MenuEntry<T>> {
                 children: vec![],
                 signal: None,
             },
-            MenuItem::Button { name, signal, checked } => MenuEntry {
-                properties: HashMap::from([
-                    (String::from("label"), OwnedValue::from(Str::from(name))),
-                    (String::from("toggle-type"), OwnedValue::from(Str::from_static("checkmark"))),
-                    (String::from("toggle-state"), OwnedValue::from(if checked {1i32 } else { 0i32 }))
-                ]),
+            MenuItem::CheckButton { name, signal, checked } => MenuEntry {
+                properties:
+                    HashMap::from([
+                        (String::from("label"), OwnedValue::from(Str::from(name))),
+                        (String::from("toggle-type"), OwnedValue::from(Str::from_static("checkmark"))),
+                        (String::from("toggle-state"), OwnedValue::from(if checked {1i32 } else { 0i32 }))
+                    ]),
+                children: vec![],
+                signal: Some(signal),
+            },
+            MenuItem::Button { name, signal } => MenuEntry {
+                properties:
+                    HashMap::from([
+                        (String::from("label"), OwnedValue::from(Str::from(name))),
+                    ]),
                 children: vec![],
                 signal: Some(signal),
             },
