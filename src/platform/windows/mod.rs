@@ -1,7 +1,13 @@
+mod icon;
 mod menu;
 mod tray;
-mod icon;
 
+use crate::error::{ErrorSource, TrayError, TrayResult};
+use crate::platform::windows::menu::NativeMenu;
+use crate::platform::windows::tray::{DataAction, TrayIconData};
+use crate::utils::OptionCellExt;
+use crate::{ensure, ClickType, Icon, Menu, TrayEvent, TrayIconBuilder};
+use once_cell::sync::Lazy;
 use std::any::Any;
 use std::cell::Cell;
 use std::iter::once;
@@ -9,17 +15,15 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Once;
-use once_cell::sync::Lazy;
-use windows::core::{PCWSTR, w};
+use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::SystemServices::IMAGE_DOS_HEADER;
 use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
-use windows::Win32::UI::WindowsAndMessaging::{CreateWindowExW, DefWindowProcW, DestroyWindow, HICON, HMENU, HWND_MESSAGE, RegisterClassW, RegisterWindowMessageW, WINDOW_EX_STYLE, WINDOW_STYLE, WM_COMMAND, WM_DESTROY, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW};
-use crate::platform::windows::menu::NativeMenu;
-use crate::{ClickType, ensure, Icon, Menu, TrayEvent, TrayIconBuilder};
-use crate::error::{ErrorSource, TrayError, TrayResult};
-use crate::platform::windows::tray::{DataAction, TrayIconData};
-use crate::utils::OptionCellExt;
+use windows::Win32::UI::WindowsAndMessaging::{
+    CreateWindowExW, DefWindowProcW, DestroyWindow, RegisterClassW, RegisterWindowMessageW, HICON,
+    HMENU, HWND_MESSAGE, WINDOW_EX_STYLE, WINDOW_STYLE, WM_COMMAND, WM_DESTROY, WM_LBUTTONDBLCLK,
+    WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW,
+};
 
 pub use icon::NativeIcon;
 
@@ -33,24 +37,24 @@ pub struct NativeTrayIcon<T> {
     hwnd: HWND,
     tray_id: u32,
     shared: Rc<SharedTrayData>,
-    _signal_type: PhantomData<T>
+    _signal_type: PhantomData<T>,
 }
 
 struct TrayLoopData {
     shared: Rc<SharedTrayData>,
-    callback: Box<dyn FnMut(TrayEvent<&dyn Any>) + 'static>
+    callback: Box<dyn FnMut(TrayEvent<&dyn Any>) + 'static>,
 }
 
 struct SharedTrayData {
     menu: Cell<Option<NativeMenu>>,
     tooltip: Cell<Option<String>>,
-    icon: Cell<Option<NativeIcon>>
+    icon: Cell<Option<NativeIcon>>,
 }
 
 impl<T: Clone + 'static> NativeTrayIcon<T> {
-
     pub fn new<F>(builder: TrayIconBuilder<T>, mut callback: F) -> TrayResult<Self>
-        where F: FnMut(TrayEvent<T>) + Send + 'static
+    where
+        F: FnMut(TrayEvent<T>) + Send + 'static,
     {
         let tray_id = GLOBAL_TRAY_COUNTER.fetch_add(1, Ordering::Relaxed);
 
@@ -60,22 +64,21 @@ impl<T: Clone + 'static> NativeTrayIcon<T> {
                 get_class_name(),
                 PCWSTR::null(),
                 WINDOW_STYLE::default(),
-                0, 0,
-                0, 0,
+                0,
+                0,
+                0,
+                0,
                 HWND_MESSAGE,
                 HMENU::default(),
                 get_instance_handle(),
-                None
+                None,
             )
         };
         ensure!(hwnd != HWND::default(), TrayError::custom("Invalid HWND"));
         log::trace!("Created new message window (tray id: {tray_id})");
 
         let shared = Rc::new(SharedTrayData {
-            menu: Cell::new(builder
-                .menu
-                .map(NativeMenu::try_from)
-                .transpose()?),
+            menu: Cell::new(builder.menu.map(NativeMenu::try_from).transpose()?),
             tooltip: Cell::new(builder.tooltip),
             icon: Cell::new(builder.icon.map(NativeIcon::from)),
         });
@@ -84,16 +87,17 @@ impl<T: Clone + 'static> NativeTrayIcon<T> {
             .with_message(WM_USER_TRAY_ICON)
             .apply(hwnd, tray_id, DataAction::Add)?;
 
-
         let data = TrayLoopData {
             shared: shared.clone(),
-            callback: Box::new(move |event: TrayEvent<&dyn Any> | {
+            callback: Box::new(move |event: TrayEvent<&dyn Any>| {
                 let event = match event {
-                    TrayEvent::Menu(signal) => TrayEvent::Menu(signal
-                        .downcast_ref::<T>()
-                        .expect("Signal has the wrong type")
-                        .clone()),
-                    TrayEvent::Tray(click) => TrayEvent::Tray(click)
+                    TrayEvent::Menu(signal) => TrayEvent::Menu(
+                        signal
+                            .downcast_ref::<T>()
+                            .expect("Signal has the wrong type")
+                            .clone(),
+                    ),
+                    TrayEvent::Tray(click) => TrayEvent::Tray(click),
                 };
                 callback(event);
             }),
@@ -104,8 +108,9 @@ impl<T: Clone + 'static> NativeTrayIcon<T> {
                 hwnd,
                 Some(tray_subclass_proc),
                 TRAY_SUBCLASS_ID,
-                Box::into_raw(Box::new(data)) as _)
-                .ok()?;
+                Box::into_raw(Box::new(data)) as _,
+            )
+            .ok()?;
         }
 
         Ok(NativeTrayIcon {
@@ -114,18 +119,13 @@ impl<T: Clone + 'static> NativeTrayIcon<T> {
             shared,
             _signal_type: PhantomData::default(),
         })
-
     }
-
 }
 
 impl<T> NativeTrayIcon<T> {
     pub fn set_tooltip(&self, tooltip: Option<String>) {
         TrayIconData::default()
-            .with_tooltip(tooltip
-                .as_ref()
-                .map(|s| s.as_str())
-                .unwrap_or(""))
+            .with_tooltip(tooltip.as_ref().map(|s| s.as_str()).unwrap_or(""))
             .apply(self.hwnd, self.tray_id, DataAction::Modify)
             .unwrap();
         self.shared.tooltip.set(tooltip)
@@ -133,18 +133,20 @@ impl<T> NativeTrayIcon<T> {
 
     pub fn set_icon(&self, icon: Option<Icon>) {
         TrayIconData::default()
-            .with_icon(icon.as_ref().map(|i| i.0.handle()).unwrap_or(HICON::default()))
+            .with_icon(
+                icon.as_ref()
+                    .map(|i| i.0.handle())
+                    .unwrap_or(HICON::default()),
+            )
             .apply(self.hwnd, self.tray_id, DataAction::Modify)
             .unwrap();
         self.shared.icon.set(icon.map(|i| i.0))
     }
-
 }
 
 impl<T: 'static> NativeTrayIcon<T> {
     pub fn set_menu(&self, menu: Option<Menu<T>>) {
-        let menu = menu
-            .map(|m| NativeMenu::try_from(m).unwrap());
+        let menu = menu.map(|m| NativeMenu::try_from(m).unwrap());
         self.shared.menu.set(menu);
     }
 }
@@ -164,47 +166,44 @@ impl<T> Drop for NativeTrayIcon<T> {
     }
 }
 
-
-
-
-
-unsafe extern "system" fn tray_subclass_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM, _id: usize, subclass_input_ptr: usize) -> LRESULT {
+unsafe extern "system" fn tray_subclass_proc(
+    hwnd: HWND,
+    msg: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+    _id: usize,
+    subclass_input_ptr: usize,
+) -> LRESULT {
     let subclass_input_ptr = subclass_input_ptr as *mut TrayLoopData;
     let subclass_input = &mut *subclass_input_ptr;
     match msg {
         WM_DESTROY => {
             drop(Box::from_raw(subclass_input_ptr));
             log::trace!("Dropped message loop data");
-        },
+        }
         _ if msg == *S_U_TASKBAR_RESTART => log::debug!("Taskbar restarted"),
-        WM_USER_TRAY_ICON => if let Some(click) = ClickType::from_lparam(lparam) {
-            (subclass_input.callback)(TrayEvent::Tray(click));
-            if click == ClickType::Right {
-                subclass_input
-                    .shared
-                    .menu
-                    .with(|menu| menu
-                        .show_on_cursor(hwnd)
-                        .unwrap_or_else(|err| log::warn!("Failed to show menu: {err}")));
+        WM_USER_TRAY_ICON => {
+            if let Some(click) = ClickType::from_lparam(lparam) {
+                (subclass_input.callback)(TrayEvent::Tray(click));
+                if click == ClickType::Right {
+                    subclass_input.shared.menu.with(|menu| {
+                        menu.show_on_cursor(hwnd)
+                            .unwrap_or_else(|err| log::warn!("Failed to show menu: {err}"))
+                    });
+                }
             }
         }
         WM_COMMAND => {
             let id = LOWORD(wparam.0 as _);
-            subclass_input
-                .shared
-                .menu
-                .with(|menu| {
-                    match menu.map(id) {
-                        None => log::debug!("Unknown menu item id: {id}"),
-                        Some(signal) => (subclass_input.callback)(TrayEvent::Menu(signal))
-                    }
-                });
+            subclass_input.shared.menu.with(|menu| match menu.map(id) {
+                None => log::debug!("Unknown menu item id: {id}"),
+                Some(signal) => (subclass_input.callback)(TrayEvent::Menu(signal)),
+            });
         }
         _ => {}
     }
     DefSubclassProc(hwnd, msg, wparam, lparam)
 }
-
 
 #[allow(non_snake_case)]
 pub fn LOWORD(dword: u32) -> u16 {
@@ -213,8 +212,8 @@ pub fn LOWORD(dword: u32) -> u16 {
 
 static GLOBAL_TRAY_COUNTER: AtomicU32 = AtomicU32::new(1);
 
-static S_U_TASKBAR_RESTART: Lazy<u32> = Lazy::new(|| unsafe { RegisterWindowMessageW(w!("TaskbarCreated")) });
-
+static S_U_TASKBAR_RESTART: Lazy<u32> =
+    Lazy::new(|| unsafe { RegisterWindowMessageW(w!("TaskbarCreated")) });
 
 fn get_class_name() -> PCWSTR {
     static INITIALIZED: Once = Once::new();
@@ -224,7 +223,12 @@ fn get_class_name() -> PCWSTR {
     INITIALIZED.call_once(|| {
         let hinstance = get_instance_handle();
 
-        unsafe extern "system" fn tray_icon_window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+        unsafe extern "system" fn tray_icon_window_proc(
+            hwnd: HWND,
+            msg: u32,
+            wparam: WPARAM,
+            lparam: LPARAM,
+        ) -> LRESULT {
             DefWindowProcW(hwnd, msg, wparam, lparam)
         }
 
@@ -242,10 +246,7 @@ fn get_class_name() -> PCWSTR {
 }
 
 fn encode_wide(string: &str) -> Vec<u16> {
-    string
-        .encode_utf16()
-        .chain(once(0))
-        .collect()
+    string.encode_utf16().chain(once(0)).collect()
 }
 
 // taken from winit's code base
@@ -265,7 +266,6 @@ fn get_instance_handle() -> HINSTANCE {
     HINSTANCE(unsafe { &__ImageBase as *const _ as _ })
 }
 
-
 pub type PlatformError = windows::core::Error;
 impl From<PlatformError> for ErrorSource {
     fn from(value: PlatformError) -> Self {
@@ -279,7 +279,7 @@ impl ClickType {
             WM_LBUTTONUP => Some(Self::Left),
             WM_RBUTTONUP => Some(Self::Right),
             WM_LBUTTONDBLCLK => Some(Self::Double),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -289,17 +289,11 @@ impl<T: AsRef<SharedTrayData>> From<T> for TrayIconData {
         let shared = value.as_ref();
         let mut data = Some(TrayIconData::default());
         shared.tooltip.with(|tooltip| {
-            let t = data
-                .take()
-                .unwrap()
-                .with_tooltip(tooltip);
+            let t = data.take().unwrap().with_tooltip(tooltip);
             data = Some(t);
         });
         shared.icon.with(|icon| {
-            let t = data
-                .take()
-                .unwrap()
-                .with_icon(icon.handle());
+            let t = data.take().unwrap().with_icon(icon.handle());
             data = Some(t);
         });
         data.unwrap()

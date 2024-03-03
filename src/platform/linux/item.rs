@@ -1,15 +1,15 @@
-use std::sync::atomic::{AtomicBool, Ordering};
-use parking_lot::Mutex;
-use zbus::{dbus_interface, SignalContext};
-use zbus::zvariant::{ObjectPath, OwnedObjectPath};
-use crate::platform::linux::{MENU_PATH, TrayCallback};
+use crate::platform::linux::{TrayCallback, MENU_PATH};
 use crate::{ClickType, TrayEvent};
+use parking_lot::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use zbus::zvariant::{ObjectPath, OwnedObjectPath};
+use zbus::{dbus_interface, SignalContext};
 
 pub struct StatusNotifierItem<T> {
     first_activate: AtomicBool,
     tooltip: Mutex<String>,
     icon: Mutex<String>,
-    callback: TrayCallback<T>
+    callback: TrayCallback<T>,
 }
 
 impl<T> StatusNotifierItem<T> {
@@ -21,17 +21,24 @@ impl<T> StatusNotifierItem<T> {
             callback,
         }
     }
-
 }
 
-impl<T: Send + 'static>  StatusNotifierItem<T> {
-    pub async fn update_tooltip(&self, tooltip: String, signal_context: &SignalContext<'_>) -> zbus::Result<()> {
+impl<T: Send + 'static> StatusNotifierItem<T> {
+    pub async fn update_tooltip(
+        &self,
+        tooltip: String,
+        signal_context: &SignalContext<'_>,
+    ) -> zbus::Result<()> {
         *self.tooltip.lock() = tooltip;
         Self::new_tool_tip(signal_context).await?;
         Ok(())
     }
 
-    pub async fn update_icon(&self, icon: String, signal_context: &SignalContext<'_>) -> zbus::Result<()> {
+    pub async fn update_icon(
+        &self,
+        icon: String,
+        signal_context: &SignalContext<'_>,
+    ) -> zbus::Result<()> {
         *self.icon.lock() = icon;
         Self::new_icon(signal_context).await?;
         Ok(())
@@ -40,7 +47,6 @@ impl<T: Send + 'static>  StatusNotifierItem<T> {
 
 #[dbus_interface(name = "org.kde.StatusNotifierItem")]
 impl<T: Send + 'static> StatusNotifierItem<T> {
-
     fn activate(&self, _x: i32, _y: i32) {
         //skipping the first activation, which triggers the construction of the menu
         //after that every activation appears to be a double click
@@ -61,7 +67,6 @@ impl<T: Send + 'static> StatusNotifierItem<T> {
     fn secondary_activate(&self, _x: i32, _y: i32) {
         //println!("secondary activate {x} {y}");
     }
-
 
     #[dbus_interface(signal)]
     async fn new_attention_icon(ctx: &SignalContext<'_>) -> zbus::Result<()> {}
@@ -154,7 +159,12 @@ impl<T: Send + 'static> StatusNotifierItem<T> {
 
     #[dbus_interface(property)]
     fn tool_tip(&self) -> (String, Vec<(i32, i32, Vec<u8>)>, String, String) {
-        (String::new(), Vec::new(), self.tooltip.lock().clone(), String::new())
+        (
+            String::new(),
+            Vec::new(),
+            self.tooltip.lock().clone(),
+            String::new(),
+        )
     }
 
     #[dbus_interface(property)]
@@ -162,4 +172,3 @@ impl<T: Send + 'static> StatusNotifierItem<T> {
         0
     }
 }
-

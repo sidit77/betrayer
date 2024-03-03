@@ -1,26 +1,27 @@
-mod menu;
 mod callback;
+mod menu;
 
-use std::cell::{Cell, RefCell};
-use std::rc::Rc;
-use icrate::AppKit::{NSApplication, NSStatusBar, NSStatusItem, NSVariableStatusItemLength};
-use icrate::Foundation::NSString;
-use objc2::rc::Id;
 use crate::error::TrayResult;
-use crate::{ClickType, Menu, TrayEvent, TrayIconBuilder, Icon};
 use crate::platform::macos::callback::SystemTrayCallback;
 use crate::platform::macos::menu::construct_native_menu;
 use crate::utils::OptionCellExt;
+use crate::{ClickType, Icon, Menu, TrayEvent, TrayIconBuilder};
+use icrate::AppKit::{NSApplication, NSStatusBar, NSStatusItem, NSVariableStatusItemLength};
+use icrate::Foundation::NSString;
+use objc2::rc::Id;
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 
 pub struct NativeTrayIcon<T> {
     status_item: Id<NSStatusItem>,
     signal_map: Rc<Cell<Option<Vec<T>>>>,
-    callback: Id<SystemTrayCallback>
+    callback: Id<SystemTrayCallback>,
 }
 
 impl<T: Clone + 'static> NativeTrayIcon<T> {
     pub fn new<F>(builder: TrayIconBuilder<T>, callback: F) -> TrayResult<Self>
-        where F: FnMut(TrayEvent<T>) + Send + 'static
+    where
+        F: FnMut(TrayEvent<T>) + Send + 'static,
     {
         unsafe {
             NSApplication::sharedApplication();
@@ -38,7 +39,7 @@ impl<T: Clone + 'static> NativeTrayIcon<T> {
                         callback.borrow_mut()(TrayEvent::Tray(ClickType::Left));
                     } else {
                         let signal = signal_map
-                            .with(|map: &mut Vec<T> | map.get(tag as usize).cloned())
+                            .with(|map: &mut Vec<T>| map.get(tag as usize).cloned())
                             .flatten();
                         if let Some(signal) = signal {
                             callback.borrow_mut()(TrayEvent::Menu(signal));
@@ -56,7 +57,10 @@ impl<T: Clone + 'static> NativeTrayIcon<T> {
                 button.setTag(-1);
             }
 
-            if let Some((menu, map)) = builder.menu.map(|menu| construct_native_menu(menu, &callback)) {
+            if let Some((menu, map)) = builder
+                .menu
+                .map(|menu| construct_native_menu(menu, &callback))
+            {
                 status_item.setMenu(Some(&menu));
                 signal_map.set(Some(map));
             }
@@ -64,7 +68,7 @@ impl<T: Clone + 'static> NativeTrayIcon<T> {
             Ok(Self {
                 status_item,
                 signal_map,
-                callback
+                callback,
             })
         }
     }
@@ -83,13 +87,9 @@ impl<T> Drop for NativeTrayIcon<T> {
 }
 
 impl<T> NativeTrayIcon<T> {
-    pub fn set_tooltip(&self, _tooltip: Option<String>) {
+    pub fn set_tooltip(&self, _tooltip: Option<String>) {}
 
-    }
-
-    pub fn set_icon(&self, _icon: Option<Icon>) {
-
-    }
+    pub fn set_icon(&self, _icon: Option<Icon>) {}
 
     pub fn set_menu(&self, menu: Option<Menu<T>>) {
         match menu {
@@ -104,7 +104,6 @@ impl<T> NativeTrayIcon<T> {
             }
         }
     }
-
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]

@@ -1,7 +1,7 @@
 #![doc = include_str!("../Readme.md")]
 
-mod platform;
 mod error;
+mod platform;
 mod utils;
 
 #[cfg(feature = "winit")]
@@ -9,18 +9,17 @@ pub mod winit;
 
 use platform::{NativeIcon, NativeTrayIcon};
 
-pub use error::{TrayResult, TrayError, ErrorSource};
+pub use error::{ErrorSource, TrayError, TrayResult};
 
 /// Builder struct for a tray icon
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct TrayIconBuilder<T = ()> {
     menu: Option<Menu<T>>,
     tooltip: Option<String>,
-    icon: Option<Icon>
+    icon: Option<Icon>,
 }
 
 impl<T> TrayIconBuilder<T> {
-
     pub fn new() -> Self {
         Self {
             menu: None,
@@ -48,24 +47,21 @@ impl<T> TrayIconBuilder<T> {
         self.icon = Some(icon);
         self
     }
-
 }
 
 impl<T: Clone + Send + 'static> TrayIconBuilder<T> {
-
     /// Attempts to create the tray icon. See the the *Platform notes* section of the Readme for more information.
     pub fn build<F>(self, callback: F) -> TrayResult<TrayIcon<T>>
-        where F: FnMut(TrayEvent<T>) + Send + 'static
+    where
+        F: FnMut(TrayEvent<T>) + Send + 'static,
     {
         Ok(TrayIcon(NativeTrayIcon::new(self, callback)?))
     }
-
 }
 
 pub struct TrayIcon<T>(NativeTrayIcon<T>);
 
 impl<T> TrayIcon<T> {
-
     /// Updates or removes the tooltip
     pub fn set_tooltip<S: ToString>(&self, tooltip: impl Into<Option<S>>) {
         self.0.set_tooltip(tooltip.into().map(|s| s.to_string()))
@@ -77,7 +73,6 @@ impl<T> TrayIcon<T> {
 }
 
 impl<T: 'static> TrayIcon<T> {
-
     /// Updates or removes the menu
     pub fn set_menu(&self, menu: impl Into<Option<Menu<T>>>) {
         self.0.set_menu(menu.into())
@@ -97,7 +92,7 @@ impl<T: 'static> TrayIcon<T> {
 pub enum ClickType {
     Left,
     Right,
-    Double
+    Double,
 }
 
 /// An event describing how the user interacted with the tray icon or associated menu
@@ -108,7 +103,7 @@ pub enum ClickType {
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum TrayEvent<T> {
     Tray(ClickType),
-    Menu(T)
+    Menu(T),
 }
 
 /// A struct describing the layout of a tray icon menu
@@ -116,14 +111,14 @@ pub enum TrayEvent<T> {
 /// The actual Menus are created lazily by the [TrayIcon].
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Menu<T> {
-    items: Vec<MenuItem<T>>
+    items: Vec<MenuItem<T>>,
 }
 
 impl<T> Menu<T> {
-
     /// Create a new menu with the given children
     pub fn new<I>(items: I) -> Self
-        where I: IntoIterator<Item=MenuItem<T>>
+    where
+        I: IntoIterator<Item = MenuItem<T>>,
     {
         Self {
             items: items.into_iter().collect(),
@@ -132,11 +127,8 @@ impl<T> Menu<T> {
 
     /// Creates a new empty menu
     pub fn empty() -> Self {
-        Self {
-            items: Vec::new(),
-        }
+        Self { items: Vec::new() }
     }
-
 }
 
 /// Various menu items that can be added to a [Menu]
@@ -146,7 +138,7 @@ pub enum MenuItem<T> {
     CheckButton {
         name: String,
         signal: T,
-        checked: bool
+        checked: bool,
     },
     Button {
         name: String,
@@ -154,12 +146,11 @@ pub enum MenuItem<T> {
     },
     Menu {
         name: String,
-        children: Vec<MenuItem<T>>
-    }
+        children: Vec<MenuItem<T>>,
+    },
 }
 
 impl<T> MenuItem<T> {
-
     /// A separator
     pub fn separator() -> Self {
         Self::Separator
@@ -167,7 +158,8 @@ impl<T> MenuItem<T> {
 
     /// A new clickable entry with label that emits a [TrayEvent::Menu] when clicked
     pub fn button<S>(name: S, signal: T) -> Self
-        where S: ToString
+    where
+        S: ToString,
     {
         Self::Button {
             name: name.to_string(),
@@ -177,7 +169,8 @@ impl<T> MenuItem<T> {
 
     /// A new clickable entry with label and checkmark that emits a [TrayEvent::Menu] when clicked
     pub fn check_button<S>(name: S, signal: T, checked: bool) -> Self
-        where S: ToString
+    where
+        S: ToString,
     {
         Self::CheckButton {
             name: name.to_string(),
@@ -188,14 +181,15 @@ impl<T> MenuItem<T> {
 
     /// A new submenu
     pub fn menu<S, I>(name: S, children: I) -> Self
-        where S: ToString, I: IntoIterator<Item=MenuItem<T>>
+    where
+        S: ToString,
+        I: IntoIterator<Item = MenuItem<T>>,
     {
         Self::Menu {
             name: name.to_string(),
             children: children.into_iter().collect(),
         }
     }
-
 }
 
 /// An icon struct
@@ -203,10 +197,12 @@ impl<T> MenuItem<T> {
 pub struct Icon(NativeIcon);
 
 impl Icon {
-
     /// Creates a new icon from raw RGBA data
     pub fn from_rgba(rgba: Vec<u8>, width: u32, height: u32) -> TrayResult<Self> {
-        ensure!(rgba.len() as u32 == width * height * 4, TrayError::custom("Invalid dimensions"));
+        ensure!(
+            rgba.len() as u32 == width * height * 4,
+            TrayError::custom("Invalid dimensions")
+        );
         Ok(Icon(NativeIcon::from_rgba(rgba, width, height)?))
     }
 
@@ -221,7 +217,6 @@ impl Icon {
     pub fn from_resource(resource_id: u16, size: Option<(u32, u32)>) -> TrayResult<Self> {
         Ok(Icon(NativeIcon::from_resource(resource_id, size)?))
     }
-
 }
 
 impl From<Icon> for NativeIcon {

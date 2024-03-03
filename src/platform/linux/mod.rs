@@ -1,18 +1,18 @@
-mod menu;
 mod item;
+mod menu;
 
-use std::cell::Cell;
-use std::path::PathBuf;
-use std::sync::{Arc, OnceLock};
-use std::sync::atomic::{AtomicU32, Ordering};
+use crate::error::{ErrorSource, TrayResult};
+use crate::platform::linux::item::StatusNotifierItem;
+use crate::platform::linux::menu::DBusMenu;
+use crate::{Icon, Menu, TrayEvent, TrayIconBuilder};
 use flume::Sender;
 use parking_lot::Mutex;
 use png::{BitDepth, ColorType, Encoder};
-use zbus::{ConnectionBuilder, dbus_proxy, Task};
-use crate::error::{ErrorSource, TrayResult};
-use crate::{Icon, Menu, TrayEvent, TrayIconBuilder};
-use crate::platform::linux::item::StatusNotifierItem;
-use crate::platform::linux::menu::DBusMenu;
+use std::cell::Cell;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, OnceLock};
+use zbus::{dbus_proxy, ConnectionBuilder, Task};
 
 static MENU_PATH: &'static str = "/MenuBar";
 static ITEM_PATH: &'static str = "/StatusNotifierItem";
@@ -21,7 +21,7 @@ static COUNTER: AtomicU32 = AtomicU32::new(1);
 enum TrayUpdate<T> {
     Menu(Menu<T>),
     Tooltip(String),
-    Icon(String)
+    Icon(String),
 }
 
 pub type TrayCallback<T> = Arc<Mutex<dyn FnMut(TrayEvent<T>) + Send + 'static>>;
@@ -35,9 +35,9 @@ pub struct NativeTrayIcon<T> {
 }
 
 impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
-
     pub async fn new_async<F>(builder: TrayIconBuilder<T>, callback: F) -> TrayResult<Self>
-        where F: FnMut(TrayEvent<T>) + Send + 'static
+    where
+        F: FnMut(TrayEvent<T>) + Send + 'static,
     {
         let pid = std::process::id();
         let id = COUNTER.fetch_add(1, Ordering::AcqRel);
@@ -54,51 +54,67 @@ impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
         //"/home/simon/headset-controller/resources/icon.png"
         let conn = ConnectionBuilder::session()?
             .name(name.clone())?
-            .serve_at(ITEM_PATH, StatusNotifierItem::new(
-                icon.unwrap_or_default(),
-                builder.tooltip.unwrap_or_default(),
-                callback.clone()))?
-            .serve_at(MENU_PATH, DBusMenu::new(
-                builder.menu.unwrap_or_else(Menu::empty),
-                callback))?
+            .serve_at(
+                ITEM_PATH,
+                StatusNotifierItem::new(
+                    icon.unwrap_or_default(),
+                    builder.tooltip.unwrap_or_default(),
+                    callback.clone(),
+                ),
+            )?
+            .serve_at(
+                MENU_PATH,
+                DBusMenu::new(builder.menu.unwrap_or_else(Menu::empty), callback),
+            )?
             .internal_executor(true)
             .build()
             .await?;
 
         let (sender, receiver) = flume::unbounded();
         let receiver_task = {
-
             let connection = conn.clone();
-            conn.executor().spawn(async move {
-                while let Ok(event) = receiver.recv_async().await {
-                    match event {
-                        TrayUpdate::Menu(menu) => {
-                            let iface = connection
-                                .object_server()
-                                .interface::<_, DBusMenu<T>>(MENU_PATH)
-                                .await.unwrap();
-                            let iref = iface.get().await;
-                            iref.update_menu(menu, iface.signal_context()).await.unwrap();
-                        },
-                        TrayUpdate::Tooltip(tooltip) => {
-                            let iface = connection
-                                .object_server()
-                                .interface::<_, StatusNotifierItem<T>>(ITEM_PATH)
-                                .await.unwrap();
-                            let iref = iface.get().await;
-                            iref.update_tooltip(tooltip, iface.signal_context()).await.unwrap();
-                        }
-                        TrayUpdate::Icon(icon) => {
-                            let iface = connection
-                                .object_server()
-                                .interface::<_, StatusNotifierItem<T>>(ITEM_PATH)
-                                .await.unwrap();
-                            let iref = iface.get().await;
-                            iref.update_icon(icon, iface.signal_context()).await.unwrap();
+            conn.executor().spawn(
+                async move {
+                    while let Ok(event) = receiver.recv_async().await {
+                        match event {
+                            TrayUpdate::Menu(menu) => {
+                                let iface = connection
+                                    .object_server()
+                                    .interface::<_, DBusMenu<T>>(MENU_PATH)
+                                    .await
+                                    .unwrap();
+                                let iref = iface.get().await;
+                                iref.update_menu(menu, iface.signal_context())
+                                    .await
+                                    .unwrap();
+                            }
+                            TrayUpdate::Tooltip(tooltip) => {
+                                let iface = connection
+                                    .object_server()
+                                    .interface::<_, StatusNotifierItem<T>>(ITEM_PATH)
+                                    .await
+                                    .unwrap();
+                                let iref = iface.get().await;
+                                iref.update_tooltip(tooltip, iface.signal_context())
+                                    .await
+                                    .unwrap();
+                            }
+                            TrayUpdate::Icon(icon) => {
+                                let iface = connection
+                                    .object_server()
+                                    .interface::<_, StatusNotifierItem<T>>(ITEM_PATH)
+                                    .await
+                                    .unwrap();
+                                let iref = iface.get().await;
+                                iref.update_icon(icon, iface.signal_context())
+                                    .await
+                                    .unwrap();
+                            }
                         }
                     }
-                }
-            }, "event receiver")
+                },
+                "event receiver",
+            )
         };
 
         let proxy = StatusNotifierWatcherProxy::builder(&conn)
@@ -108,23 +124,21 @@ impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
 
         proxy.register_status_notifier_item(&name).await?;
 
-
         Ok(Self {
             id: (pid, id),
             sender,
             tmp_icon_file: Cell::new(tmp_icon_path.flatten()),
             tmp_icon_counter: Cell::new(tmp_icon_counter),
-            _update_task: receiver_task
+            _update_task: receiver_task,
         })
-
     }
 
     pub fn new<F>(builder: TrayIconBuilder<T>, callback: F) -> TrayResult<Self>
-        where F: FnMut(TrayEvent<T>) + Send + 'static
+    where
+        F: FnMut(TrayEvent<T>) + Send + 'static,
     {
         async_io::block_on(Self::new_async(builder, callback))
     }
-
 }
 
 impl<T> NativeTrayIcon<T> {
@@ -152,12 +166,10 @@ impl<T> NativeTrayIcon<T> {
             .send(TrayUpdate::Icon(icon.unwrap_or_default()))
             .unwrap_or_else(|err| log::warn!("Failed to send update: {err}"));
     }
-
 }
 
 #[dbus_proxy(interface = "org.kde.StatusNotifierWatcher", assume_defaults = true)]
 trait StatusNotifierWatcher {
-
     fn register_status_notifier_host(&self, service: &str) -> zbus::Result<()>;
 
     fn register_status_notifier_item(&self, service: &str) -> zbus::Result<()>;
@@ -188,11 +200,10 @@ trait StatusNotifierWatcher {
 pub enum NativeIcon {
     #[allow(dead_code)]
     Path(String),
-    Pixels(Vec<u8>)
+    Pixels(Vec<u8>),
 }
 
 impl NativeIcon {
-
     pub fn from_rgba(rgba: Vec<u8>, width: u32, height: u32) -> TrayResult<Self> {
         let mut pixels = Vec::new();
         let mut encoder = Encoder::new(&mut pixels, width, height);
@@ -207,7 +218,11 @@ impl NativeIcon {
     pub fn from_png_bytes(bytes: &[u8]) -> TrayResult<Self> {
         Ok(Self::Pixels(bytes.to_vec()))
     }
-    fn write_to_disk(&self, id: (u32, u32), counter: &mut u32) -> (String, Option<TmpFileRaiiHandle>) {
+    fn write_to_disk(
+        &self,
+        id: (u32, u32),
+        counter: &mut u32,
+    ) -> (String, Option<TmpFileRaiiHandle>) {
         match self {
             NativeIcon::Path(path) => (path.clone(), None),
             NativeIcon::Pixels(pixels) => {
@@ -240,8 +255,7 @@ fn get_tmp_icon_path((pid, id): (u32, u32), counter: u32) -> String {
             .ok()
             .unwrap_or_else(std::env::temp_dir)
             .join("betrayer");
-        std::fs::create_dir_all(&base)
-            .expect("Failed to create icon tmp dir");
+        std::fs::create_dir_all(&base).expect("Failed to create icon tmp dir");
         log::trace!("Using {base:?} as tmp dir for icons");
         base.to_str()
             .expect("Non UTF-8 paths are currently not supported")

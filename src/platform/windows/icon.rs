@@ -1,25 +1,25 @@
+use crate::error::TrayResult;
+use crate::platform::windows::get_instance_handle;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 use windows::core::PCWSTR;
-use windows::Win32::UI::WindowsAndMessaging::{CreateIcon, DestroyIcon, HICON, IMAGE_ICON, LoadImageW, LR_DEFAULTSIZE};
-use crate::error::TrayResult;
-use crate::platform::windows::get_instance_handle;
+use windows::Win32::UI::WindowsAndMessaging::{
+    CreateIcon, DestroyIcon, LoadImageW, HICON, IMAGE_ICON, LR_DEFAULTSIZE,
+};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct NativeIcon {
-    handle: Arc<NativeIconHandle>
+    handle: Arc<NativeIconHandle>,
 }
 
 impl NativeIcon {
     pub fn from_rgba(mut rgba: Vec<u8>, width: u32, height: u32) -> TrayResult<Self> {
         let mut mask = Vec::with_capacity(rgba.len() / 4);
         let bgra = {
-            rgba
-                .chunks_exact_mut(4)
-                .for_each(|pixel| {
-                    pixel.swap(0, 2);
-                    mask.push(u8::MAX - pixel[3]);
-                });
+            rgba.chunks_exact_mut(4).for_each(|pixel| {
+                pixel.swap(0, 2);
+                mask.push(u8::MAX - pixel[3]);
+            });
             rgba
         };
         log::trace!("Creating new native icon");
@@ -32,7 +32,7 @@ impl NativeIcon {
                 1,
                 4 * u8::BITS as u8,
                 mask.as_ptr(),
-                bgra.as_ptr()
+                bgra.as_ptr(),
             )?
         };
         Ok(Self {
@@ -51,7 +51,7 @@ impl NativeIcon {
                 IMAGE_ICON,
                 width as i32,
                 height as i32,
-                LR_DEFAULTSIZE
+                LR_DEFAULTSIZE,
             )?;
             HICON(handle.0)
         };
@@ -63,7 +63,6 @@ impl NativeIcon {
     pub fn handle(&self) -> HICON {
         self.handle.0
     }
-
 }
 
 #[derive(Eq, PartialEq)]

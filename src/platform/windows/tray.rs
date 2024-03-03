@@ -1,13 +1,16 @@
+use crate::error::TrayResult;
 use std::mem::size_of;
 use windows::Win32::Foundation::HWND;
-use windows::Win32::UI::Shell::{NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY, NOTIFY_ICON_MESSAGE, NOTIFYICONDATAW, Shell_NotifyIconW};
+use windows::Win32::UI::Shell::{
+    Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY,
+    NOTIFYICONDATAW, NOTIFY_ICON_MESSAGE,
+};
 use windows::Win32::UI::WindowsAndMessaging::HICON;
-use crate::error::TrayResult;
 
 pub enum DataAction {
     Add,
     Modify,
-    Remove
+    Remove,
 }
 
 impl From<DataAction> for NOTIFY_ICON_MESSAGE {
@@ -15,7 +18,7 @@ impl From<DataAction> for NOTIFY_ICON_MESSAGE {
         match value {
             DataAction::Add => NIM_ADD,
             DataAction::Modify => NIM_MODIFY,
-            DataAction::Remove => NIM_DELETE
+            DataAction::Remove => NIM_DELETE,
         }
     }
 }
@@ -32,7 +35,6 @@ impl Default for TrayIconData {
 }
 
 impl TrayIconData {
-
     pub fn with_message(mut self, message: u32) -> Self {
         self.0.uFlags |= NIF_MESSAGE;
         self.0.uCallbackMessage = message;
@@ -62,5 +64,4 @@ impl TrayIconData {
         unsafe { Shell_NotifyIconW(action.into(), &self.0).ok()? };
         Ok(())
     }
-
 }

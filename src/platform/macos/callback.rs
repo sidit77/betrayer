@@ -2,12 +2,12 @@ use std::ptr::NonNull;
 
 use block2::{Block, ConcreteBlock, RcBlock};
 use icrate::AppKit::NSControl;
-use objc2::{ClassType, declare_class, msg_send_id, msg_send, sel};
-use objc2::runtime::{NSObject, Sel};
 use objc2::declare::{Ivar, IvarDrop};
 use objc2::ffi::NSInteger;
 use objc2::mutability::InteriorMutable;
 use objc2::rc::Id;
+use objc2::runtime::{NSObject, Sel};
+use objc2::{declare_class, msg_send, msg_send_id, sel, ClassType};
 
 declare_class!(
     #[derive(Debug)]
@@ -25,7 +25,10 @@ declare_class!(
 
     unsafe impl SystemTrayCallback {
         #[method(initWithCallback:)]
-        unsafe fn init(this: *mut Self, callback: *mut Block<(NSInteger,), ()>) -> Option<NonNull<Self>> {
+        unsafe fn init(
+            this: *mut Self,
+            callback: *mut Block<(NSInteger,), ()>,
+        ) -> Option<NonNull<Self>> {
             let this: Option<&mut Self> = msg_send![super(this), init];
             let Some(this) = this else {
                 return None;

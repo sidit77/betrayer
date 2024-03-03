@@ -1,24 +1,35 @@
+use crate::error::{TrayError, TrayResult};
+use crate::platform::windows::encode_wide;
+use crate::{Menu, MenuItem};
 use std::any::Any;
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{HWND, POINT};
-use windows::Win32::UI::WindowsAndMessaging::{AppendMenuW, CreatePopupMenu, DestroyMenu, GetCursorPos, HMENU, MF_CHECKED, MF_POPUP, MF_SEPARATOR, MF_STRING, SetForegroundWindow, TPM_BOTTOMALIGN, TPM_LEFTALIGN, TrackPopupMenu};
-use crate::{Menu, MenuItem};
-use crate::error::{TrayError, TrayResult};
-use crate::platform::windows::encode_wide;
+use windows::Win32::UI::WindowsAndMessaging::{
+    AppendMenuW, CreatePopupMenu, DestroyMenu, GetCursorPos, SetForegroundWindow, TrackPopupMenu,
+    HMENU, MF_CHECKED, MF_POPUP, MF_SEPARATOR, MF_STRING, TPM_BOTTOMALIGN, TPM_LEFTALIGN,
+};
 
 pub struct NativeMenu {
     hmenu: HMENU,
-    signals_map: Box<dyn SignalMap>
+    signals_map: Box<dyn SignalMap>,
 }
 
 impl NativeMenu {
-
     pub fn show_on_cursor(&self, hwnd: HWND) -> TrayResult<()> {
         let mut cursor = POINT::default();
         unsafe {
             GetCursorPos(&mut cursor)?;
             SetForegroundWindow(hwnd).ok()?;
-            TrackPopupMenu(self.hmenu, TPM_BOTTOMALIGN | TPM_LEFTALIGN, cursor.x, cursor.y, 0, hwnd, None).ok()?;
+            TrackPopupMenu(
+                self.hmenu,
+                TPM_BOTTOMALIGN | TPM_LEFTALIGN,
+                cursor.x,
+                cursor.y,
+                0,
+                hwnd,
+                None,
+            )
+            .ok()?;
         }
         Ok(())
     }
@@ -26,7 +37,6 @@ impl NativeMenu {
     pub fn map(&self, id: u16) -> Option<&dyn Any> {
         self.signals_map.map(id)
     }
-
 }
 
 impl Drop for NativeMenu {
@@ -45,12 +55,21 @@ fn add_all<T>(hmenu: HMENU, signals: &mut Vec<T>, items: Vec<MenuItem<T>>) -> Tr
             MenuItem::Separator => {
                 unsafe { AppendMenuW(hmenu, MF_SEPARATOR, 0, None)? };
             }
-            MenuItem::Button { name, signal, checked } => {
-                let checked = checked
-                    .then_some(MF_CHECKED)
-                    .unwrap_or_default();
+            MenuItem::Button {
+                name,
+                signal,
+                checked,
+            } => {
+                let checked = checked.then_some(MF_CHECKED).unwrap_or_default();
                 let wide = encode_wide(&name);
-                unsafe { AppendMenuW(hmenu, MF_STRING | checked, signals.len(), PCWSTR(wide.as_ptr()))? };
+                unsafe {
+                    AppendMenuW(
+                        hmenu,
+                        MF_STRING | checked,
+                        signals.len(),
+                        PCWSTR(wide.as_ptr()),
+                    )?
+                };
                 signals.push(signal);
             }
             MenuItem::Menu { name, children } => {
@@ -85,8 +104,6 @@ trait SignalMap {
 
 impl<T: 'static> SignalMap for Vec<T> {
     fn map(&self, id: u16) -> Option<&dyn Any> {
-        self
-            .get(id as usize)
-            .map(|r| r as _)
+        self.get(id as usize).map(|r| r as _)
     }
 }

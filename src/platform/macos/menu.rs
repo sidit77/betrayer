@@ -1,31 +1,39 @@
+use crate::platform::macos::callback::SystemTrayCallback;
+use crate::{Menu, MenuItem};
 use icrate::AppKit::{NSControlStateValueOff, NSControlStateValueOn, NSMenu, NSMenuItem};
 use icrate::Foundation::NSString;
-use objc2::ClassType;
 use objc2::ffi::NSInteger;
 use objc2::rc::Id;
-use crate::{Menu, MenuItem};
-use crate::platform::macos::callback::SystemTrayCallback;
+use objc2::ClassType;
 
-pub unsafe fn build_menu_item<T>(item: MenuItem<T>, callback: &SystemTrayCallback, signal_map: &mut Vec<T>) -> Id<NSMenuItem> {
+pub unsafe fn build_menu_item<T>(
+    item: MenuItem<T>,
+    callback: &SystemTrayCallback,
+    signal_map: &mut Vec<T>,
+) -> Id<NSMenuItem> {
     match item {
         MenuItem::Separator => NSMenuItem::separatorItem(),
-        MenuItem::Button { name, checked, signal } => {
+        MenuItem::Button {
+            name,
+            checked,
+            signal,
+        } => {
             let button = NSMenuItem::initWithTitle_action_keyEquivalent(
                 NSMenuItem::alloc(),
                 &NSString::from_str(&name),
                 None,
-                &NSString::from_str("")
+                &NSString::from_str(""),
             );
             button.setState(match checked {
                 true => NSControlStateValueOn,
-                false => NSControlStateValueOff
+                false => NSControlStateValueOff,
             });
             button.setTarget(Some(callback));
             button.setAction(Some(SystemTrayCallback::selector()));
             button.setTag(signal_map.len() as NSInteger);
             signal_map.push(signal);
             button
-        },
+        }
         MenuItem::Menu { name, children } => {
             let sub = NSMenu::new();
             for item in children {
@@ -35,7 +43,7 @@ pub unsafe fn build_menu_item<T>(item: MenuItem<T>, callback: &SystemTrayCallbac
                 NSMenuItem::alloc(),
                 &NSString::from_str(&name),
                 None,
-                &NSString::from_str("")
+                &NSString::from_str(""),
             );
             button.setSubmenu(Some(&sub));
             button
@@ -43,7 +51,10 @@ pub unsafe fn build_menu_item<T>(item: MenuItem<T>, callback: &SystemTrayCallbac
     }
 }
 
-pub fn construct_native_menu<T>(menu: Menu<T>, callback: &SystemTrayCallback) -> (Id<NSMenu>, Vec<T>) {
+pub fn construct_native_menu<T>(
+    menu: Menu<T>,
+    callback: &SystemTrayCallback,
+) -> (Id<NSMenu>, Vec<T>) {
     unsafe {
         let mut signal_map = Vec::new();
         let native_menu = NSMenu::new();
@@ -52,5 +63,4 @@ pub fn construct_native_menu<T>(menu: Menu<T>, callback: &SystemTrayCallback) ->
         }
         (native_menu, signal_map)
     }
-
 }

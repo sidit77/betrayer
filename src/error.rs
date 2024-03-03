@@ -10,12 +10,12 @@ pub type TrayResult<T> = Result<T, TrayError>;
 #[derive(Debug)]
 pub enum ErrorSource {
     Os(PlatformError),
-    Custom(Cow<'static, str>)
+    Custom(Cow<'static, str>),
 }
 
 pub struct TrayError {
     location: &'static Location<'static>,
-    source: ErrorSource
+    source: ErrorSource,
 }
 
 impl TrayError {
@@ -23,7 +23,7 @@ impl TrayError {
     pub fn custom(msg: impl Into<Cow<'static, str>>) -> Self {
         Self {
             location: Location::caller(),
-            source: ErrorSource::Custom(msg.into())
+            source: ErrorSource::Custom(msg.into()),
         }
     }
 
@@ -34,7 +34,6 @@ impl TrayError {
     pub fn location(&self) -> &'static Location<'static> {
         &self.location
     }
-
 }
 
 impl Debug for TrayError {
@@ -56,7 +55,7 @@ impl<T: Into<ErrorSource>> From<T> for TrayError {
     fn from(value: T) -> Self {
         Self {
             location: Location::caller(),
-            source: value.into()
+            source: value.into(),
         }
     }
 }
