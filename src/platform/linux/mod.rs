@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use flume::Sender;
 use parking_lot::Mutex;
 use png::{BitDepth, ColorType, Encoder};
-use zbus::{ConnectionBuilder, dbus_proxy, Task};
+use zbus::{ConnectionBuilder, proxy, Task};
 use crate::error::{ErrorSource, TrayResult};
 use crate::{Icon, Menu, TrayEvent, TrayIconBuilder};
 use crate::platform::linux::item::StatusNotifierItem;
@@ -155,32 +155,32 @@ impl<T> NativeTrayIcon<T> {
 
 }
 
-#[dbus_proxy(interface = "org.kde.StatusNotifierWatcher", assume_defaults = true)]
+#[proxy(interface = "org.kde.StatusNotifierWatcher", assume_defaults = true)]
 trait StatusNotifierWatcher {
 
     fn register_status_notifier_host(&self, service: &str) -> zbus::Result<()>;
 
     fn register_status_notifier_item(&self, service: &str) -> zbus::Result<()>;
 
-    #[dbus_proxy(signal)]
+    #[zbus(signal)]
     fn status_notifier_host_registered(&self) -> zbus::Result<()>;
 
-    #[dbus_proxy(signal)]
+    #[zbus(signal)]
     fn status_notifier_host_unregistered(&self) -> zbus::Result<()>;
 
-    #[dbus_proxy(signal)]
+    #[zbus(signal)]
     fn status_notifier_item_registered(&self, arg_1: &str) -> zbus::Result<()>;
 
-    #[dbus_proxy(signal)]
+    #[zbus(signal)]
     fn status_notifier_item_unregistered(&self, arg_1: &str) -> zbus::Result<()>;
 
-    #[dbus_proxy(property)]
+    #[zbus(property)]
     fn is_status_notifier_host_registered(&self) -> zbus::Result<bool>;
 
-    #[dbus_proxy(property)]
+    #[zbus(property)]
     fn protocol_version(&self) -> zbus::Result<i32>;
 
-    #[dbus_proxy(property)]
+    #[zbus(property)]
     fn registered_status_notifier_items(&self) -> zbus::Result<Vec<String>>;
 }
 

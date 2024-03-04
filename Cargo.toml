@@ -19,7 +19,7 @@ winit = { version = "0.29", optional = true}
 
 [target."cfg(target_os = \"windows\")".dependencies]
 once_cell = "1"
-windows = { version = "0.52", features = [
+windows = { version = "0.54", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Shell",
@@ -28,16 +28,16 @@ windows = { version = "0.52", features = [
 ]}
 
 [target."cfg(target_os = \"linux\")".dependencies]
-zbus = "3"
-async-io = "1"
+zbus = "4"
+async-io = "2"
 parking_lot = "0.12"
 flume = "0.11"
 png = "0.17"
 
 [target."cfg(target_os = \"macos\")".dependencies]
-block2 = "0.3"
-icrate = { version = "0.0.4", features = ["apple", "Foundation_all", "AppKit_all"] }
-objc2 = "0.4"
+block2 = "0.4"
+icrate = { version = "0.1", features = ["apple", "Foundation_all", "AppKit_all"] }
+objc2 = "0.5"
 
 [dev-dependencies]
 winit = "0.29"

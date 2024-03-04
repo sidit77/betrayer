@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use parking_lot::Mutex;
-use zbus::{dbus_interface, SignalContext};
+use zbus::{interface, SignalContext};
 use zbus::zvariant::{ObjectPath, OwnedObjectPath};
 use crate::platform::linux::{MENU_PATH, TrayCallback};
 use crate::{ClickType, TrayEvent};
@@ -38,7 +38,7 @@ impl<T: Send + 'static>  StatusNotifierItem<T> {
     }
 }
 
-#[dbus_interface(name = "org.kde.StatusNotifierItem")]
+#[interface(name = "org.kde.StatusNotifierItem")]
 impl<T: Send + 'static> StatusNotifierItem<T> {
 
     fn activate(&self, _x: i32, _y: i32) {
@@ -63,101 +63,101 @@ impl<T: Send + 'static> StatusNotifierItem<T> {
     }
 
 
-    #[dbus_interface(signal)]
+    #[zbus(signal)]
     async fn new_attention_icon(ctx: &SignalContext<'_>) -> zbus::Result<()> {}
 
-    #[dbus_interface(signal)]
+    #[zbus(signal)]
     async fn new_icon(ctx: &SignalContext<'_>) -> zbus::Result<()> {}
 
-    #[dbus_interface(signal)]
+    #[zbus(signal)]
     async fn new_overlay_icon(ctx: &SignalContext<'_>) -> zbus::Result<()> {}
 
-    #[dbus_interface(signal)]
+    #[zbus(signal)]
     async fn new_status(ctx: &SignalContext<'_>, status: &str) -> zbus::Result<()> {}
 
-    #[dbus_interface(signal)]
+    #[zbus(signal)]
     async fn new_title(ctx: &SignalContext<'_>) -> zbus::Result<()> {}
 
-    #[dbus_interface(signal)]
+    #[zbus(signal)]
     async fn new_tool_tip(ctx: &SignalContext<'_>) -> zbus::Result<()> {}
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn attention_icon_name(&self) -> String {
         Default::default()
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn attention_icon_pixmap(&self) -> Vec<(i32, i32, Vec<u8>)> {
         Default::default()
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn attention_movie_name(&self) -> String {
         Default::default()
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn category(&self) -> String {
         String::from("ApplicationStatus")
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn icon_name(&self) -> String {
         self.icon.lock().clone()
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn icon_pixmap(&self) -> Vec<(i32, i32, Vec<u8>)> {
         Default::default()
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn icon_theme_path(&self) -> String {
         Default::default()
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn id(&self) -> String {
         //TODO How to handle this id?
         String::from("betrayer")
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn item_is_menu(&self) -> bool {
         false
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn menu(&self) -> OwnedObjectPath {
         ObjectPath::from_str_unchecked(MENU_PATH).into()
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn overlay_icon_name(&self) -> String {
         Default::default()
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn overlay_icon_pixmap(&self) -> Vec<(i32, i32, Vec<u8>)> {
         Default::default()
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn status(&self) -> String {
         String::from("Active")
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn title(&self) -> String {
         String::from("CHECKED!")
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn tool_tip(&self) -> (String, Vec<(i32, i32, Vec<u8>)>, String, String) {
         (String::new(), Vec::new(), self.tooltip.lock().clone(), String::new())
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn window_id(&self) -> i32 {
         0
     }
