@@ -2,12 +2,12 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::mem::swap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use parking_lot::Mutex;
-use zbus::{dbus_interface, SignalContext};
+use zbus::{interface, SignalContext};
 use zbus::zvariant::{OwnedValue, Str, Value};
 use crate::{ClickType, Menu, MenuItem, TrayEvent};
 use crate::platform::linux::TrayCallback;
 
-#[derive(Clone)]
+//#[derive(Clone)]
 struct MenuEntry<T> {
     properties: HashMap<String, OwnedValue>,
     children: Vec<usize>,
@@ -19,7 +19,7 @@ impl<T> MenuEntry<T> {
         self.properties
             .iter()
             .filter(|(k, _)| requested.is_empty() || requested.contains(&k.as_str()))
-            .map(clone_inner)
+            .map(clone_tuple)
             .collect()
     }
 }
@@ -141,7 +141,7 @@ fn generate_diff<T>(new: &Vec<MenuEntry<T>>, old: &Vec<MenuEntry<T>>) -> (Option
             .filter(|(k, v)| !old.properties
                 .get(*k)
                 .is_some_and(|ov| ov == *v))
-            .map(clone_inner)
+            .map(clone_tuple)
             .collect();
         if !n.is_empty() {
             updated.push((i as i32, n));
@@ -188,13 +188,15 @@ fn collect<T>(ids: &Vec<usize>, entries: &Vec<MenuEntry<T>>, property_names: &Ve
                 Value::new((
                     id as u32,
                     entry.get_properties(property_names),
-                    collect(&entry.children, entries, property_names, depth - 1))).to_owned()
+                    collect(&entry.children, entries, property_names, depth - 1)))
+                        .try_to_owned()
+                        .expect("failed to clone")
             })
             .collect()
     }
 }
 
-#[dbus_interface(name = "com.canonical.dbusmenu")]
+#[interface(name = "com.canonical.dbusmenu")]
 impl<T: Clone + Send + 'static> DBusMenu<T> {
 
     fn get_layout(&self, parent_id: i32, recursion_depth: i32, property_names: Vec<&str>) -> (u32, (i32, HashMap<String, OwnedValue>, Vec<OwnedValue>)) {
@@ -225,8 +227,8 @@ impl<T: Clone + Send + 'static> DBusMenu<T> {
             .get(id as usize)
             .and_then(|e| e.properties
                 .get(name)
-                .cloned())
-            .unwrap()
+                .map(|v| v.try_clone().expect("failed to clone")))
+            .unwrap_or(OwnedValue::from(Str::from_static("")))
     }
 
     fn event(&self, id: i32, event_id: &str, data: Value<'_>, timestamp: u32) {
@@ -266,36 +268,36 @@ impl<T: Clone + Send + 'static> DBusMenu<T> {
     }
 
 
-    #[dbus_interface(signal)]
+    #[zbus(signal)]
     async fn item_activation_requested(ctx: &SignalContext<'_>, id: i32, timestamp: u32) -> zbus::Result<()> { }
 
-    #[dbus_interface(signal)]
+    #[zbus(signal)]
     async fn items_properties_updated(ctx: &SignalContext<'_>, updated_props: &[(i32, HashMap<String, OwnedValue>, )], removed_props: &[(i32, Vec<String>)]) -> zbus::Result<()> { }
 
-    #[dbus_interface(signal)]
+    #[zbus(signal)]
     async fn layout_updated(ctx: &SignalContext<'_>, revision: u32, parent: i32) -> zbus::Result<()> { }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn icon_theme_path(&self) -> Vec<String> {
         Vec::new()
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn status(&self) -> String {
         String::from("normal")
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn text_direction(&self) -> String {
         String::from("ltr")
     }
 
-    #[dbus_interface(property)]
+    #[zbus(property)]
     fn version(&self) -> u32 {
         3
     }
 }
 
-fn clone_inner<T1: Clone, T2: Clone>((a, b): (&T1, &T2)) -> (T1, T2) {
-    (a.clone(), b.clone())
+fn clone_tuple((a, b): (&String, &OwnedValue)) -> (String, OwnedValue) {
+    (a.clone(), b.try_clone().expect("failed to clone"))
 }

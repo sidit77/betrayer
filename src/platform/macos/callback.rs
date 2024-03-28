@@ -1,21 +1,13 @@
-use std::ptr::NonNull;
-
 use block2::{Block, ConcreteBlock, RcBlock};
 use icrate::AppKit::NSControl;
-use objc2::{ClassType, declare_class, msg_send_id, msg_send, sel};
+use objc2::{ClassType, DeclaredClass, declare_class, msg_send_id, sel};
 use objc2::runtime::{NSObject, Sel};
-use objc2::declare::{Ivar, IvarDrop};
 use objc2::ffi::NSInteger;
 use objc2::mutability::InteriorMutable;
-use objc2::rc::Id;
+use objc2::rc::{Id, Allocated};
 
 declare_class!(
-    #[derive(Debug)]
-    pub struct SystemTrayCallback {
-        callback: IvarDrop<Box<RcBlock<(NSInteger,), ()>>, "_callback">,
-    }
-
-    mod ivars;
+    pub struct SystemTrayCallback;
 
     unsafe impl ClassType for SystemTrayCallback {
         type Super = NSObject;
@@ -23,36 +15,36 @@ declare_class!(
         const NAME: &'static str = "SystemTrayCallback";
     }
 
+    impl DeclaredClass for SystemTrayCallback {
+        type Ivars = RcBlock<(NSInteger,), ()>;
+    }
+
     unsafe impl SystemTrayCallback {
-        #[method(initWithCallback:)]
-        unsafe fn init(this: *mut Self, callback: *mut Block<(NSInteger,), ()>) -> Option<NonNull<Self>> {
-            let this: Option<&mut Self> = msg_send![super(this), init];
-            let Some(this) = this else {
-                return None;
-            };
-
-            Ivar::write(&mut this.callback, Box::new(RcBlock::copy(callback)));
-
-            Some(NonNull::from(this))
+        #[method_id(initWithCallback:)]
+        fn init_with(this: Allocated<Self>, callback: *mut Block<(NSInteger,), ()>) -> Option<Id<Self>> {
+            let this = this.set_ivars(unsafe { RcBlock::copy(callback) });
+            unsafe { msg_send_id![super(this), init] }
         }
 
         #[method(call_control:)]
         unsafe fn call_control(&self, sender: *mut NSControl) {
             if let Some(sender) = sender.as_ref() {
-                self.callback.call((sender.tag(),));
+                self.ivars().call((sender.tag(),));
             }
         }
+
     }
+
 );
 
 impl SystemTrayCallback {
-    fn from_block(callback: &Block<(NSInteger,), ()>) -> Id<Self> {
-        unsafe { msg_send_id![Self::alloc(), initWithCallback: callback] }
+    unsafe fn from_block(callback: &Block<(NSInteger,), ()>) -> Id<Self> {
+        msg_send_id![Self::alloc(), initWithCallback: callback]
     }
 
     pub fn new<F: Fn(NSInteger) + 'static>(callback: F) -> Id<Self> {
         let callback_block = ConcreteBlock::new(callback).copy();
-        Self::from_block(&*callback_block)
+        unsafe { Self::from_block(&callback_block) }
     }
 
     pub fn selector() -> Sel {
