@@ -146,7 +146,7 @@ pub enum MenuItem<T> {
     Button {
         name: String,
         signal: T,
-        checked: bool
+        checked: Option<bool>
     },
     Menu {
         name: String,
@@ -168,7 +168,7 @@ impl<T> MenuItem<T> {
         Self::Button {
             name: name.to_string(),
             signal,
-            checked: false,
+            checked: None,
         }
     }
 
@@ -179,7 +179,7 @@ impl<T> MenuItem<T> {
         Self::Button {
             name: name.to_string(),
             signal,
-            checked,
+            checked: Some(checked),
         }
     }
 

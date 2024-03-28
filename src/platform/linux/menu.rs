@@ -86,14 +86,23 @@ fn build_menu<T>(menu: Menu<T>) -> Vec<MenuEntry<T>> {
                 children: vec![],
                 signal: None,
             },
-            MenuItem::Button { name, signal, checked } => MenuEntry {
-                properties: HashMap::from([
-                    (String::from("label"), OwnedValue::from(Str::from(name))),
-                    (String::from("toggle-type"), OwnedValue::from(Str::from_static("checkmark"))),
-                    (String::from("toggle-state"), OwnedValue::from(if checked {1i32 } else { 0i32 }))
-                ]),
-                children: vec![],
-                signal: Some(signal),
+            MenuItem::Button { name, signal, checked } => {
+                let props = match checked {
+                    Some(checked) => HashMap::from([
+                        (String::from("label"), OwnedValue::from(Str::from(name))),
+                        (String::from("toggle-type"), OwnedValue::from(Str::from_static("checkmark"))),
+                        (String::from("toggle-state"), OwnedValue::from(if checked {1i32 } else { 0i32 }))
+                    ]),
+                    None =>HashMap::from([
+                        (String::from("label"), OwnedValue::from(Str::from(name)))
+                    ])
+                };
+             
+                MenuEntry {
+                    properties: props,
+                    children: vec![],
+                    signal: Some(signal),
+                }
             },
             MenuItem::Menu { name, children } => MenuEntry {
                 properties: HashMap::from([
