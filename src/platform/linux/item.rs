@@ -1,8 +1,10 @@
 use std::sync::atomic::{AtomicBool, Ordering};
+
 use parking_lot::Mutex;
-use zbus::{interface, SignalContext};
 use zbus::zvariant::{ObjectPath, OwnedObjectPath};
-use crate::platform::linux::{MENU_PATH, TrayCallback};
+use zbus::{interface, SignalContext};
+
+use crate::platform::linux::{TrayCallback, MENU_PATH};
 use crate::{ClickType, TrayEvent};
 
 pub struct StatusNotifierItem<T> {
@@ -18,13 +20,12 @@ impl<T> StatusNotifierItem<T> {
             first_activate: AtomicBool::new(true),
             tooltip: Mutex::new(tooltip),
             icon: Mutex::new(icon),
-            callback,
+            callback
         }
     }
-
 }
 
-impl<T: Send + 'static>  StatusNotifierItem<T> {
+impl<T: Send + 'static> StatusNotifierItem<T> {
     pub async fn update_tooltip(&self, tooltip: String, signal_context: &SignalContext<'_>) -> zbus::Result<()> {
         *self.tooltip.lock() = tooltip;
         Self::new_tool_tip(signal_context).await?;
@@ -40,7 +41,6 @@ impl<T: Send + 'static>  StatusNotifierItem<T> {
 
 #[interface(name = "org.kde.StatusNotifierItem")]
 impl<T: Send + 'static> StatusNotifierItem<T> {
-
     fn activate(&self, _x: i32, _y: i32) {
         //skipping the first activation, which triggers the construction of the menu
         //after that every activation appears to be a double click
@@ -61,7 +61,6 @@ impl<T: Send + 'static> StatusNotifierItem<T> {
     fn secondary_activate(&self, _x: i32, _y: i32) {
         //println!("secondary activate {x} {y}");
     }
-
 
     #[zbus(signal)]
     async fn new_attention_icon(ctx: &SignalContext<'_>) -> zbus::Result<()> {}
@@ -162,4 +161,3 @@ impl<T: Send + 'static> StatusNotifierItem<T> {
         0
     }
 }
-

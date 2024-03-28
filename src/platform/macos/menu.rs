@@ -2,10 +2,13 @@ use icrate::AppKit::{NSControlStateValueOff, NSControlStateValueOn, NSMenu, NSMe
 use icrate::Foundation::{MainThreadMarker, NSString};
 use objc2::ffi::NSInteger;
 use objc2::rc::Id;
-use crate::{Menu, MenuItem};
-use crate::platform::macos::callback::SystemTrayCallback;
 
-pub unsafe fn build_menu_item<T>(marker: MainThreadMarker, item: MenuItem<T>, callback: &SystemTrayCallback, signal_map: &mut Vec<T>) -> Id<NSMenuItem> {
+use crate::platform::macos::callback::SystemTrayCallback;
+use crate::{Menu, MenuItem};
+
+pub unsafe fn build_menu_item<T>(
+    marker: MainThreadMarker, item: MenuItem<T>, callback: &SystemTrayCallback, signal_map: &mut Vec<T>
+) -> Id<NSMenuItem> {
     match item {
         MenuItem::Separator => NSMenuItem::separatorItem(marker),
         MenuItem::Button { name, checked, signal } => {
@@ -26,7 +29,7 @@ pub unsafe fn build_menu_item<T>(marker: MainThreadMarker, item: MenuItem<T>, ca
             button.setTag(signal_map.len() as NSInteger);
             signal_map.push(signal);
             button
-        },
+        }
         MenuItem::Menu { name, children } => {
             let sub = NSMenu::new(marker);
             for item in children {
@@ -51,9 +54,8 @@ pub fn construct_native_menu<T>(marker: MainThreadMarker, menu: Menu<T>, callbac
         let mut signal_map = Vec::new();
         let native_menu = NSMenu::new(marker);
         for item in menu.items {
-            native_menu.addItem(&build_menu_item(marker,item, callback, &mut signal_map));
+            native_menu.addItem(&build_menu_item(marker, item, callback, &mut signal_map));
         }
         (native_menu, signal_map)
     }
-
 }

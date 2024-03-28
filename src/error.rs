@@ -34,7 +34,6 @@ impl TrayError {
     pub fn location(&self) -> &'static Location<'static> {
         &self.location
     }
-
 }
 
 impl Debug for TrayError {
