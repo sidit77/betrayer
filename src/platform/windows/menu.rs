@@ -47,7 +47,7 @@ fn add_all<T>(hmenu: HMENU, signals: &mut Vec<T>, items: Vec<MenuItem<T>>) -> Tr
             }
             MenuItem::Button { name, signal, checked } => {
                 let checked = checked
-                    .then_some(MF_CHECKED)
+                    .map(|v|v.then_some(MF_CHECKED).unwrap_or_default())
                     .unwrap_or_default();
                 let wide = encode_wide(&name);
                 unsafe { AppendMenuW(hmenu, MF_STRING | checked, signals.len(), PCWSTR(wide.as_ptr()))? };

@@ -16,7 +16,7 @@ pub unsafe fn build_menu_item<T>(item: MenuItem<T>, callback: &SystemTrayCallbac
                 None,
                 &NSString::from_str("")
             );
-            button.setState(match checked {
+            button.setState(match checked.unwrap_or_default() {  //todo 
                 true => NSControlStateValueOn,
                 false => NSControlStateValueOff
             });
