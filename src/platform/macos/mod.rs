@@ -4,8 +4,8 @@ mod menu;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use icrate::AppKit::{NSApplication, NSStatusBar, NSStatusItem, NSVariableStatusItemLength};
-use icrate::Foundation::{MainThreadMarker, NSString};
+use objc2_app_kit::{NSApplication, NSStatusBar, NSStatusItem, NSVariableStatusItemLength};
+use objc2_foundation::{MainThreadMarker, NSString};
 use objc2::rc::Id;
 
 use crate::error::TrayResult;
@@ -54,7 +54,6 @@ impl<T: Clone + 'static> NativeTrayIcon<T> {
                     }
                 })
             };
-
             if let Some(button) = status_item.button(marker) {
                 button.setTitle(&NSString::from_str("TEST BUTTON"));
                 button.setTarget(Some(&callback));

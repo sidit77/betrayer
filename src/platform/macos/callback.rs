@@ -1,5 +1,5 @@
 use block2::{Block, ConcreteBlock, RcBlock};
-use icrate::AppKit::NSControl;
+use objc2_app_kit::NSControl;
 use objc2::ffi::NSInteger;
 use objc2::mutability::InteriorMutable;
 use objc2::rc::{Allocated, Id};

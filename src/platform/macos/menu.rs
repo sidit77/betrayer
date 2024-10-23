@@ -1,5 +1,5 @@
-use icrate::AppKit::{NSControlStateValueOff, NSControlStateValueOn, NSMenu, NSMenuItem};
-use icrate::Foundation::{MainThreadMarker, NSString};
+use objc2_app_kit::{NSControlStateValueOff, NSControlStateValueOn, NSMenu, NSMenuItem};
+use objc2_foundation::{MainThreadMarker, NSString};
 use objc2::ffi::NSInteger;
 use objc2::rc::Id;
 

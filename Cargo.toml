@@ -36,7 +36,16 @@ png = "0.17.13"
 
 [target."cfg(target_os = \"macos\")".dependencies]
 block2 = "0.4.0"
-icrate = { version = "0.1.0", features = ["apple", "Foundation_all", "AppKit_all"] }
+objc2-app-kit = { version = "0.2.2", features = [
+    "NSButton",
+    "NSCell",
+    "NSControl",
+    "NSStatusBar",
+    "NSStatusBarButton",
+    "NSStatusItem",
+    "NSView"
+] }
+objc2-foundation = "0.2.2"
 objc2 = "0.5.0"
 
 [dev-dependencies]
