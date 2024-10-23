@@ -9,7 +9,7 @@ use std::sync::{Arc, OnceLock};
 use flume::Sender;
 use parking_lot::Mutex;
 use png::{BitDepth, ColorType, Encoder};
-use zbus::{proxy, ConnectionBuilder, Task};
+use zbus::{connection, proxy, Task};
 
 use crate::error::{ErrorSource, TrayResult};
 use crate::platform::linux::item::StatusNotifierItem;
@@ -54,7 +54,7 @@ impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
 
         let callback = Arc::new(Mutex::new(callback));
         //"/home/simon/headset-controller/resources/icon.png"
-        let conn = ConnectionBuilder::session()?
+        let conn = connection::Builder::session()?
             .name(name.clone())?
             .serve_at(
                 ITEM_PATH,
@@ -79,7 +79,7 @@ impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
                                     .await
                                     .unwrap();
                                 let iref = iface.get().await;
-                                iref.update_menu(menu, iface.signal_context())
+                                iref.update_menu(menu, iface.signal_emitter())
                                     .await
                                     .unwrap();
                             }
@@ -90,7 +90,7 @@ impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
                                     .await
                                     .unwrap();
                                 let iref = iface.get().await;
-                                iref.update_tooltip(tooltip, iface.signal_context())
+                                iref.update_tooltip(tooltip, iface.signal_emitter())
                                     .await
                                     .unwrap();
                             }
@@ -101,7 +101,7 @@ impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
                                     .await
                                     .unwrap();
                                 let iref = iface.get().await;
-                                iref.update_icon(icon, iface.signal_context())
+                                iref.update_icon(icon, iface.signal_emitter())
                                     .await
                                     .unwrap();
                             }

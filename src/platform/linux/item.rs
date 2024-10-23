@@ -2,8 +2,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use parking_lot::Mutex;
 use zbus::zvariant::{ObjectPath, OwnedObjectPath};
-use zbus::{interface, SignalContext};
-
+use zbus::{interface};
+use zbus::object_server::SignalEmitter;
 use crate::platform::linux::{TrayCallback, MENU_PATH};
 use crate::{ClickType, TrayEvent};
 
@@ -26,13 +26,13 @@ impl<T> StatusNotifierItem<T> {
 }
 
 impl<T: Send + 'static> StatusNotifierItem<T> {
-    pub async fn update_tooltip(&self, tooltip: String, signal_context: &SignalContext<'_>) -> zbus::Result<()> {
+    pub async fn update_tooltip(&self, tooltip: String, signal_context: &SignalEmitter<'_>) -> zbus::Result<()> {
         *self.tooltip.lock() = tooltip;
         Self::new_tool_tip(signal_context).await?;
         Ok(())
     }
 
-    pub async fn update_icon(&self, icon: String, signal_context: &SignalContext<'_>) -> zbus::Result<()> {
+    pub async fn update_icon(&self, icon: String, signal_context: &SignalEmitter<'_>) -> zbus::Result<()> {
         *self.icon.lock() = icon;
         Self::new_icon(signal_context).await?;
         Ok(())
@@ -63,22 +63,22 @@ impl<T: Send + 'static> StatusNotifierItem<T> {
     }
 
     #[zbus(signal)]
-    async fn new_attention_icon(ctx: &SignalContext<'_>) -> zbus::Result<()> {}
+    async fn new_attention_icon(ctx: &SignalEmitter<'_>) -> zbus::Result<()> {}
 
     #[zbus(signal)]
-    async fn new_icon(ctx: &SignalContext<'_>) -> zbus::Result<()> {}
+    async fn new_icon(ctx: &SignalEmitter<'_>) -> zbus::Result<()> {}
 
     #[zbus(signal)]
-    async fn new_overlay_icon(ctx: &SignalContext<'_>) -> zbus::Result<()> {}
+    async fn new_overlay_icon(ctx: &SignalEmitter<'_>) -> zbus::Result<()> {}
 
     #[zbus(signal)]
-    async fn new_status(ctx: &SignalContext<'_>, status: &str) -> zbus::Result<()> {}
+    async fn new_status(ctx: &SignalEmitter<'_>, status: &str) -> zbus::Result<()> {}
 
     #[zbus(signal)]
-    async fn new_title(ctx: &SignalContext<'_>) -> zbus::Result<()> {}
+    async fn new_title(ctx: &SignalEmitter<'_>) -> zbus::Result<()> {}
 
     #[zbus(signal)]
-    async fn new_tool_tip(ctx: &SignalContext<'_>) -> zbus::Result<()> {}
+    async fn new_tool_tip(ctx: &SignalEmitter<'_>) -> zbus::Result<()> {}
 
     #[zbus(property)]
     fn attention_icon_name(&self) -> String {

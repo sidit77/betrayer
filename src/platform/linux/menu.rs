@@ -4,8 +4,8 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use parking_lot::Mutex;
 use zbus::zvariant::{OwnedValue, Str, Value};
-use zbus::{interface, SignalContext};
-
+use zbus::{interface};
+use zbus::object_server::SignalEmitter;
 use crate::platform::linux::TrayCallback;
 use crate::{ClickType, Menu, MenuItem, TrayEvent};
 
@@ -44,7 +44,7 @@ impl<T> DBusMenu<T> {
 }
 
 impl<T: Clone + Send + 'static> DBusMenu<T> {
-    pub async fn update_menu(&self, menu: Menu<T>, signal_context: &SignalContext<'_>) -> zbus::Result<()> {
+    pub async fn update_menu(&self, menu: Menu<T>, signal_context: &SignalEmitter<'_>) -> zbus::Result<()> {
         let (layout, updated, removed) = {
             let mut current_entries = self.entries.lock();
             let mut entries = build_menu(menu);
@@ -278,16 +278,16 @@ impl<T: Clone + Send + 'static> DBusMenu<T> {
     }
 
     #[zbus(signal)]
-    async fn item_activation_requested(ctx: &SignalContext<'_>, id: i32, timestamp: u32) -> zbus::Result<()> {}
+    async fn item_activation_requested(ctx: &SignalEmitter<'_>, id: i32, timestamp: u32) -> zbus::Result<()> {}
 
     #[zbus(signal)]
     async fn items_properties_updated(
-        ctx: &SignalContext<'_>, updated_props: &[(i32, HashMap<String, OwnedValue>)], removed_props: &[(i32, Vec<String>)]
+        ctx: &SignalEmitter<'_>, updated_props: &[(i32, HashMap<String, OwnedValue>)], removed_props: &[(i32, Vec<String>)]
     ) -> zbus::Result<()> {
     }
 
     #[zbus(signal)]
-    async fn layout_updated(ctx: &SignalContext<'_>, revision: u32, parent: i32) -> zbus::Result<()> {}
+    async fn layout_updated(ctx: &SignalEmitter<'_>, revision: u32, parent: i32) -> zbus::Result<()> {}
 
     #[zbus(property)]
     fn icon_theme_path(&self) -> Vec<String> {
