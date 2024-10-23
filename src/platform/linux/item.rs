@@ -1,9 +1,10 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use parking_lot::Mutex;
-use zbus::zvariant::{ObjectPath, OwnedObjectPath};
-use zbus::{interface};
+use zbus::interface;
 use zbus::object_server::SignalEmitter;
+use zbus::zvariant::{ObjectPath, OwnedObjectPath};
+
 use crate::platform::linux::{TrayCallback, MENU_PATH};
 use crate::{ClickType, TrayEvent};
 
@@ -151,6 +152,7 @@ impl<T: Send + 'static> StatusNotifierItem<T> {
         String::from("CHECKED!")
     }
 
+    #[allow(clippy::type_complexity)]
     #[zbus(property)]
     fn tool_tip(&self) -> (String, Vec<(i32, i32, Vec<u8>)>, String, String) {
         (String::new(), Vec::new(), self.tooltip.lock().clone(), String::new())

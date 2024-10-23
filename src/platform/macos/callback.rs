@@ -1,4 +1,4 @@
-use block2::{Block, ConcreteBlock, RcBlock, StackBlock};
+use block2::{Block, RcBlock};
 use objc2::ffi::NSInteger;
 use objc2::mutability::InteriorMutable;
 use objc2::rc::{Allocated, Id};

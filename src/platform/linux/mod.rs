@@ -16,8 +16,8 @@ use crate::platform::linux::item::StatusNotifierItem;
 use crate::platform::linux::menu::DBusMenu;
 use crate::{Icon, Menu, TrayEvent, TrayIconBuilder};
 
-static MENU_PATH: &'static str = "/MenuBar";
-static ITEM_PATH: &'static str = "/StatusNotifierItem";
+static MENU_PATH: &str = "/MenuBar";
+static ITEM_PATH: &str = "/StatusNotifierItem";
 static COUNTER: AtomicU32 = AtomicU32::new(1);
 
 enum TrayUpdate<T> {

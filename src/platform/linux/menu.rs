@@ -3,9 +3,10 @@ use std::mem::swap;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use parking_lot::Mutex;
-use zbus::zvariant::{OwnedValue, Str, Value};
-use zbus::{interface};
+use zbus::interface;
 use zbus::object_server::SignalEmitter;
+use zbus::zvariant::{OwnedValue, Str, Value};
+
 use crate::platform::linux::TrayCallback;
 use crate::{ClickType, Menu, MenuItem, TrayEvent};
 
@@ -118,9 +119,8 @@ fn build_menu<T>(menu: Menu<T>) -> Vec<MenuEntry<T>> {
     entries
 }
 
-fn generate_diff<T>(
-    new: &Vec<MenuEntry<T>>, old: &Vec<MenuEntry<T>>
-) -> (Option<i32>, Vec<(i32, HashMap<String, OwnedValue>)>, Vec<(i32, Vec<String>)>) {
+#[allow(clippy::type_complexity)]
+fn generate_diff<T>(new: &[MenuEntry<T>], old: &[MenuEntry<T>]) -> (Option<i32>, Vec<(i32, HashMap<String, OwnedValue>)>, Vec<(i32, Vec<String>)>) {
     let mut updated = Vec::new();
     let mut removed = Vec::new();
     let mut changed = HashSet::new();
@@ -160,7 +160,7 @@ fn generate_diff<T>(
     (changed, updated, removed)
 }
 
-fn find_common_root<T>(entries: &Vec<MenuEntry<T>>, changed: &HashSet<usize>) -> usize {
+fn find_common_root<T>(entries: &[MenuEntry<T>], changed: &HashSet<usize>) -> usize {
     let mut cache = HashMap::new();
     for (i, entry) in entries.iter().enumerate().rev() {
         let c: u32 = u32::from(changed.contains(&i))
@@ -178,7 +178,7 @@ fn find_common_root<T>(entries: &Vec<MenuEntry<T>>, changed: &HashSet<usize>) ->
         .expect("There should be a common root")
 }
 
-fn collect<T>(ids: &Vec<usize>, entries: &Vec<MenuEntry<T>>, property_names: &Vec<&str>, depth: u32) -> Vec<OwnedValue> {
+fn collect<T>(ids: &[usize], entries: &[MenuEntry<T>], property_names: &[&str], depth: u32) -> Vec<OwnedValue> {
     match depth {
         0 => Vec::new(),
         _ => ids
@@ -200,6 +200,7 @@ fn collect<T>(ids: &Vec<usize>, entries: &Vec<MenuEntry<T>>, property_names: &Ve
 
 #[interface(name = "com.canonical.dbusmenu")]
 impl<T: Clone + Send + 'static> DBusMenu<T> {
+    #[allow(clippy::type_complexity)]
     fn get_layout(
         &self, parent_id: i32, recursion_depth: i32, property_names: Vec<&str>
     ) -> (u32, (i32, HashMap<String, OwnedValue>, Vec<OwnedValue>)) {
@@ -224,7 +225,8 @@ impl<T: Clone + Send + 'static> DBusMenu<T> {
         entries
             .iter()
             .enumerate()
-            .filter_map(|(i, e)| (ids.is_empty() || ids.contains(&(i as i32))).then(|| (i as i32, e.get_properties(&property_names))))
+            .filter(|&(i, _)| ids.is_empty() || ids.contains(&(i as i32)))
+            .map(|(i, e)| (i as i32, e.get_properties(&property_names)))
             .collect()
     }
 

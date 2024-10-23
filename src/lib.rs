@@ -18,13 +18,19 @@ pub struct TrayIconBuilder<T = ()> {
     icon: Option<Icon>
 }
 
-impl<T> TrayIconBuilder<T> {
-    pub fn new() -> Self {
+impl<T> Default for TrayIconBuilder<T> {
+    fn default() -> Self {
         Self {
             menu: None,
             tooltip: None,
             icon: None
         }
+    }
+}
+
+impl<T> TrayIconBuilder<T> {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Sets the [Menu] of the tray icon. When not set the tray is created without menu.

@@ -43,6 +43,7 @@ pub struct NativeTrayIcon<T> {
 
 struct TrayLoopData {
     shared: Rc<SharedTrayData>,
+    #[allow(clippy::type_complexity)]
     callback: Box<dyn FnMut(TrayEvent<&dyn Any>) + 'static>
 }
 
@@ -109,7 +110,7 @@ impl<T: Clone + 'static> NativeTrayIcon<T> {
             hwnd,
             tray_id,
             shared,
-            _signal_type: PhantomData::default()
+            _signal_type: PhantomData
         })
     }
 }
@@ -117,7 +118,7 @@ impl<T: Clone + 'static> NativeTrayIcon<T> {
 impl<T> NativeTrayIcon<T> {
     pub fn set_tooltip(&self, tooltip: Option<String>) {
         TrayIconData::default()
-            .with_tooltip(tooltip.as_ref().map(|s| s.as_str()).unwrap_or(""))
+            .with_tooltip(tooltip.as_deref().unwrap_or(""))
             .apply(self.hwnd, self.tray_id, DataAction::Modify)
             .unwrap();
         self.shared.tooltip.set(tooltip)

@@ -67,6 +67,9 @@ impl NativeIcon {
 #[derive(Eq, PartialEq)]
 struct NativeIconHandle(HICON);
 
+unsafe impl Send for NativeIconHandle {}
+unsafe impl Sync for NativeIconHandle {}
+
 impl Drop for NativeIconHandle {
     fn drop(&mut self) {
         log::trace!("Dropping native icon");
