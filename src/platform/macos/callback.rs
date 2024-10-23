@@ -1,4 +1,4 @@
-use block2::{Block, ConcreteBlock, RcBlock};
+use block2::{Block, ConcreteBlock, RcBlock, StackBlock};
 use objc2_app_kit::NSControl;
 use objc2::ffi::NSInteger;
 use objc2::mutability::InteriorMutable;
@@ -16,13 +16,13 @@ declare_class!(
     }
 
     impl DeclaredClass for SystemTrayCallback {
-        type Ivars = RcBlock<(NSInteger,), ()>;
+        type Ivars = RcBlock<dyn Fn(NSInteger)>;
     }
 
     unsafe impl SystemTrayCallback {
         #[method_id(initWithCallback:)]
-        fn init_with(this: Allocated<Self>, callback: *mut Block<(NSInteger,), ()>) -> Option<Id<Self>> {
-            let this = this.set_ivars(unsafe { RcBlock::copy(callback) });
+        fn init_with(this: Allocated<Self>, callback: *mut Block<dyn Fn(NSInteger)>) -> Option<Id<Self>> {
+            let this = this.set_ivars(unsafe { RcBlock::copy(callback).expect("Failed to copy block") });
             unsafe { msg_send_id![super(this), init] }
         }
 
@@ -38,12 +38,12 @@ declare_class!(
 );
 
 impl SystemTrayCallback {
-    unsafe fn from_block(callback: &Block<(NSInteger,), ()>) -> Id<Self> {
+    unsafe fn from_block(callback: &Block<dyn Fn(NSInteger)>) -> Id<Self> {
         msg_send_id![Self::alloc(), initWithCallback: callback]
     }
 
     pub fn new<F: Fn(NSInteger) + 'static>(callback: F) -> Id<Self> {
-        let callback_block = ConcreteBlock::new(callback).copy();
+        let callback_block = RcBlock::new(callback);
         unsafe { Self::from_block(&callback_block) }
     }
 
