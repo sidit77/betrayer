@@ -1,12 +1,13 @@
-use std::mem::size_of;
+use std::mem::{size_of, zeroed};
 
-use windows::Win32::Foundation::HWND;
-use windows::Win32::UI::Shell::{
-    Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY, NOTIFYICONDATAW, NOTIFY_ICON_MESSAGE
+use windows_sys::Win32::Foundation::HWND;
+use windows_sys::Win32::UI::Shell::{
+    NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY, NOTIFY_ICON_MESSAGE, NOTIFYICONDATAW, Shell_NotifyIconW
 };
-use windows::Win32::UI::WindowsAndMessaging::HICON;
+use windows_sys::Win32::UI::WindowsAndMessaging::HICON;
 
 use crate::error::TrayResult;
+use crate::platform::windows::error_check;
 
 pub enum DataAction {
     Add,
@@ -30,7 +31,7 @@ impl Default for TrayIconData {
     fn default() -> Self {
         Self(NOTIFYICONDATAW {
             cbSize: size_of::<NOTIFYICONDATAW>() as u32,
-            ..Default::default()
+            ..unsafe { zeroed() }
         })
     }
 }
@@ -62,7 +63,7 @@ impl TrayIconData {
     pub fn apply(mut self, hwnd: HWND, id: u32, action: DataAction) -> TrayResult<()> {
         self.0.hWnd = hwnd;
         self.0.uID = id;
-        unsafe { Shell_NotifyIconW(action.into(), &self.0).ok()? };
+        error_check(unsafe { Shell_NotifyIconW(action.into(), &self.0) })?;
         Ok(())
     }
 }

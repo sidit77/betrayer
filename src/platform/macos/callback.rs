@@ -4,7 +4,7 @@ use objc2::ffi::NSInteger;
 use objc2::mutability::InteriorMutable;
 use objc2::rc::{Allocated, Id};
 use objc2::runtime::{NSObject, Sel};
-use objc2::{declare_class, msg_send_id, sel, ClassType, DeclaredClass};
+use objc2::{ClassType, DeclaredClass, declare_class, msg_send_id, sel};
 
 declare_class!(
     pub struct SystemTrayCallback;

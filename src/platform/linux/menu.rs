@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 use parking_lot::Mutex;
 use zbus::zvariant::{OwnedValue, Str, Value};
-use zbus::{interface, SignalContext};
+use zbus::{SignalContext, interface};
 
 use crate::platform::linux::TrayCallback;
 use crate::{ClickType, Menu, MenuItem, TrayEvent};

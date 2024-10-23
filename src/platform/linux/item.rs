@@ -2,9 +2,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use parking_lot::Mutex;
 use zbus::zvariant::{ObjectPath, OwnedObjectPath};
-use zbus::{interface, SignalContext};
+use zbus::{SignalContext, interface};
 
-use crate::platform::linux::{TrayCallback, MENU_PATH};
+use crate::platform::linux::{MENU_PATH, TrayCallback};
 use crate::{ClickType, TrayEvent};
 
 pub struct StatusNotifierItem<T> {

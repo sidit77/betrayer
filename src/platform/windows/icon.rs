@@ -1,11 +1,11 @@
 use std::fmt::{Debug, Formatter};
+use std::ptr::null_mut;
 use std::sync::Arc;
 
-use windows::core::PCWSTR;
-use windows::Win32::UI::WindowsAndMessaging::{CreateIcon, DestroyIcon, LoadImageW, HICON, IMAGE_ICON, LR_DEFAULTSIZE};
+use windows_sys::Win32::UI::WindowsAndMessaging::{CreateIcon, DestroyIcon, HICON, IMAGE_ICON, LR_DEFAULTSIZE, LoadImageW};
 
 use crate::error::TrayResult;
-use crate::platform::windows::get_instance_handle;
+use crate::platform::windows::{error_check, get_instance_handle};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct NativeIcon {
@@ -24,7 +24,17 @@ impl NativeIcon {
         };
         log::trace!("Creating new native icon");
         //  LoadIconW(None, IDI_QUESTION)?
-        let handle = unsafe { CreateIcon(None, width as i32, height as i32, 1, 4 * u8::BITS as u8, mask.as_ptr(), bgra.as_ptr())? };
+        let handle = error_check(unsafe {
+            CreateIcon(
+                null_mut(),
+                width as i32,
+                height as i32,
+                1,
+                4 * u8::BITS as u8,
+                mask.as_ptr(),
+                bgra.as_ptr()
+            )
+        })?;
         Ok(Self {
             handle: Arc::new(NativeIconHandle(handle))
         })
@@ -34,17 +44,16 @@ impl NativeIcon {
         let (width, height) = size.unwrap_or((0, 0));
         log::trace!("Creating new native icon");
         //  LoadIconW(None, IDI_QUESTION)?
-        let handle = unsafe {
-            let handle = LoadImageW(
+        let handle = error_check(unsafe {
+            LoadImageW(
                 get_instance_handle(),
-                PCWSTR(resource_id as *const u16),
+                resource_id as *const u16,
                 IMAGE_ICON,
                 width as i32,
                 height as i32,
                 LR_DEFAULTSIZE
-            )?;
-            HICON(handle.0)
-        };
+            )
+        })?;
         Ok(Self {
             handle: Arc::new(NativeIconHandle(handle))
         })
@@ -61,8 +70,8 @@ struct NativeIconHandle(HICON);
 impl Drop for NativeIconHandle {
     fn drop(&mut self) {
         log::trace!("Dropping native icon");
-        unsafe {
-            DestroyIcon(self.0).unwrap_or_else(|err| log::warn!("Failed to destroy native icon: {err}"));
+        if let Err(err) = error_check(unsafe { DestroyIcon(self.0) }) {
+            log::warn!("Failed to destroy native icon: {err}");
         }
     }
 }

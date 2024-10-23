@@ -4,7 +4,7 @@ use betrayer::{Icon, Menu, MenuItem, TrayEvent, TrayIcon, TrayIconBuilder};
 use log::LevelFilter;
 use simple_logger::SimpleLogger;
 use winit::application::ApplicationHandler;
-use winit::event::{WindowEvent};
+use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::WindowId;
 
@@ -47,7 +47,7 @@ struct App {
 }
 
 impl ApplicationHandler<TrayEvent<Signal>> for App {
-    fn resumed(&mut self, _event_loop: &ActiveEventLoop) { }
+    fn resumed(&mut self, _event_loop: &ActiveEventLoop) {}
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: TrayEvent<Signal>) {
         log::info!("tray event: {:?}", event);
         if let TrayEvent::Menu(signal) = event {
@@ -55,7 +55,8 @@ impl ApplicationHandler<TrayEvent<Signal>> for App {
                 Signal::Profile(i) => {
                     if self.selected != i {
                         self.selected = i;
-                        self.tray.set_tooltip(format!("Active Profile: {}", self.selected));
+                        self.tray
+                            .set_tooltip(format!("Active Profile: {}", self.selected));
                         self.tray.set_menu(build_menu(self.selected));
                     }
                 }
@@ -64,7 +65,7 @@ impl ApplicationHandler<TrayEvent<Signal>> for App {
             }
         }
     }
-    fn window_event(&mut self, _event_loop: &ActiveEventLoop, _window_id: WindowId, _event: WindowEvent) { }
+    fn window_event(&mut self, _event_loop: &ActiveEventLoop, _window_id: WindowId, _event: WindowEvent) {}
 }
 
 fn build_menu(selected: u32) -> Menu<Signal> {

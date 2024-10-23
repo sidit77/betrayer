@@ -6,26 +6,27 @@ use std::any::Any;
 use std::cell::Cell;
 use std::iter::once;
 use std::marker::PhantomData;
+use std::mem::zeroed;
+use std::ptr::{null, null_mut};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::Once;
+use std::sync::{LazyLock, Once};
 
 pub use icon::NativeIcon;
-use once_cell::sync::Lazy;
-use windows::core::{w, PCWSTR};
-use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
-use windows::Win32::System::SystemServices::IMAGE_DOS_HEADER;
-use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
-use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, RegisterClassW, RegisterWindowMessageW, HICON, HMENU, HWND_MESSAGE, WINDOW_EX_STYLE,
-    WINDOW_STYLE, WM_COMMAND, WM_DESTROY, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW
+use windows_sys::Win32::Foundation::{BOOL, HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
+use windows_sys::Win32::System::SystemServices::IMAGE_DOS_HEADER;
+use windows_sys::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
+use windows_sys::Win32::UI::WindowsAndMessaging::{
+    CreateWindowExW, DefWindowProcW, DestroyWindow, HWND_MESSAGE, RegisterClassW, RegisterWindowMessageW, WINDOW_EX_STYLE, WINDOW_STYLE, WM_COMMAND,
+    WM_DESTROY, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW
 };
+use windows_sys::core::{PCWSTR, w};
 
-use crate::error::{ErrorSource, TrayError, TrayResult};
+use crate::error::{ErrorSource, TrayResult};
 use crate::platform::windows::menu::NativeMenu;
 use crate::platform::windows::tray::{DataAction, TrayIconData};
 use crate::utils::OptionCellExt;
-use crate::{ensure, ClickType, Icon, Menu, TrayEvent, TrayIconBuilder};
+use crate::{ClickType, Icon, Menu, TrayEvent, TrayIconBuilder};
 
 //TODO Better error handling for the set_* functions
 //TODO Replace Cell to avoid potential overrides
@@ -58,23 +59,22 @@ impl<T: Clone + 'static> NativeTrayIcon<T> {
     {
         let tray_id = GLOBAL_TRAY_COUNTER.fetch_add(1, Ordering::Relaxed);
 
-        let hwnd = unsafe {
+        let hwnd = error_check(unsafe {
             CreateWindowExW(
                 WINDOW_EX_STYLE::default(),
                 get_class_name(),
-                PCWSTR::null(),
+                null(),
                 WINDOW_STYLE::default(),
                 0,
                 0,
                 0,
                 0,
                 HWND_MESSAGE,
-                HMENU::default(),
+                null_mut(),
                 get_instance_handle(),
-                None
+                null()
             )
-        };
-        ensure!(hwnd != HWND::default(), TrayError::custom("Invalid HWND"));
+        })?;
         log::trace!("Created new message window (tray id: {tray_id})");
 
         let shared = Rc::new(SharedTrayData {
@@ -103,9 +103,7 @@ impl<T: Clone + 'static> NativeTrayIcon<T> {
             })
         };
 
-        unsafe {
-            SetWindowSubclass(hwnd, Some(tray_subclass_proc), TRAY_SUBCLASS_ID, Box::into_raw(Box::new(data)) as _).ok()?;
-        }
+        error_check(unsafe { SetWindowSubclass(hwnd, Some(tray_subclass_proc), TRAY_SUBCLASS_ID, Box::into_raw(Box::new(data)) as _) })?;
 
         Ok(NativeTrayIcon {
             hwnd,
@@ -127,11 +125,7 @@ impl<T> NativeTrayIcon<T> {
 
     pub fn set_icon(&self, icon: Option<Icon>) {
         TrayIconData::default()
-            .with_icon(
-                icon.as_ref()
-                    .map(|i| i.0.handle())
-                    .unwrap_or(HICON::default())
-            )
+            .with_icon(icon.as_ref().map(|i| i.0.handle()).unwrap_or(null_mut()))
             .apply(self.hwnd, self.tray_id, DataAction::Modify)
             .unwrap();
         self.shared.icon.set(icon.map(|i| i.0))
@@ -153,9 +147,9 @@ impl<T> Drop for NativeTrayIcon<T> {
             .apply(self.hwnd, self.tray_id, DataAction::Remove)
             .unwrap_or_else(|err| log::warn!("Failed to remove tray icon: {err}"));
 
-        unsafe {
-            DestroyWindow(self.hwnd).unwrap_or_else(|err| log::warn!("Failed to destroy message window: {err}"));
-        };
+        if let Err(err) = error_check(unsafe { DestroyWindow(self.hwnd) }) {
+            log::warn!("Failed to destroy message window: {err}")
+        }
     }
 }
 
@@ -180,7 +174,7 @@ unsafe extern "system" fn tray_subclass_proc(hwnd: HWND, msg: u32, wparam: WPARA
             }
         }
         WM_COMMAND => {
-            let id = LOWORD(wparam.0 as _);
+            let id = LOWORD(wparam as _);
             subclass_input.shared.menu.with(|menu| match menu.map(id) {
                 None => log::debug!("Unknown menu item id: {id}"),
                 Some(signal) => (subclass_input.callback)(TrayEvent::Menu(signal))
@@ -198,7 +192,7 @@ pub fn LOWORD(dword: u32) -> u16 {
 
 static GLOBAL_TRAY_COUNTER: AtomicU32 = AtomicU32::new(1);
 
-static S_U_TASKBAR_RESTART: Lazy<u32> = Lazy::new(|| unsafe { RegisterWindowMessageW(w!("TaskbarCreated")) });
+static S_U_TASKBAR_RESTART: LazyLock<u32> = LazyLock::new(|| unsafe { RegisterWindowMessageW(w!("TaskbarCreated")) });
 
 fn get_class_name() -> PCWSTR {
     static INITIALIZED: Once = Once::new();
@@ -216,7 +210,7 @@ fn get_class_name() -> PCWSTR {
             lpfnWndProc: Some(tray_icon_window_proc),
             hInstance: hinstance,
             lpszClassName: class_name,
-            ..Default::default()
+            ..unsafe { zeroed() }
         };
         let class = unsafe { RegisterClassW(&wnd_class) };
         log::trace!("Registered tray window class: 0x{:x}", class);
@@ -243,10 +237,10 @@ fn get_instance_handle() -> HINSTANCE {
         static __ImageBase: IMAGE_DOS_HEADER;
     }
 
-    HINSTANCE(unsafe { &__ImageBase as *const _ as _ })
+    unsafe { &__ImageBase as *const _ as _ }
 }
 
-pub type PlatformError = windows::core::Error;
+pub type PlatformError = windows_result::Error;
 impl From<PlatformError> for ErrorSource {
     fn from(value: PlatformError) -> Self {
         ErrorSource::Os(value)
@@ -255,7 +249,7 @@ impl From<PlatformError> for ErrorSource {
 
 impl ClickType {
     fn from_lparam(lparam: LPARAM) -> Option<Self> {
-        match lparam.0 as u32 {
+        match lparam as u32 {
             WM_LBUTTONUP => Some(Self::Left),
             WM_RBUTTONUP => Some(Self::Right),
             WM_LBUTTONDBLCLK => Some(Self::Double),
@@ -277,5 +271,32 @@ impl<T: AsRef<SharedTrayData>> From<T> for TrayIconData {
             data = Some(t);
         });
         data.unwrap()
+    }
+}
+
+#[inline]
+fn error_check<T: Win32Result>(value: T) -> windows_result::Result<T> {
+    match value.is_success() {
+        false => Err(windows_result::Error::from_win32()),
+        true => Ok(value)
+    }
+}
+
+#[doc(hidden)]
+trait Win32Result {
+    fn is_success(&self) -> bool;
+}
+
+impl Win32Result for *mut std::ffi::c_void {
+    #[inline]
+    fn is_success(&self) -> bool {
+        !self.is_null()
+    }
+}
+
+impl Win32Result for BOOL {
+    #[inline]
+    fn is_success(&self) -> bool {
+        *self != 0
     }
 }
