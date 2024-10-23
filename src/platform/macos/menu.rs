@@ -1,7 +1,7 @@
-use objc2_app_kit::{NSControlStateValueOff, NSControlStateValueOn, NSMenu, NSMenuItem};
-use objc2_foundation::{MainThreadMarker, NSString};
 use objc2::ffi::NSInteger;
 use objc2::rc::Id;
+use objc2_app_kit::{NSControlStateValueOff, NSControlStateValueOn, NSMenu, NSMenuItem};
+use objc2_foundation::{MainThreadMarker, NSString};
 
 use crate::platform::macos::callback::SystemTrayCallback;
 use crate::{Menu, MenuItem};

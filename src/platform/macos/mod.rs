@@ -4,9 +4,9 @@ mod menu;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
+use objc2::rc::Id;
 use objc2_app_kit::{NSApplication, NSStatusBar, NSStatusItem, NSVariableStatusItemLength};
 use objc2_foundation::{MainThreadMarker, NSString};
-use objc2::rc::Id;
 
 use crate::error::TrayResult;
 use crate::platform::macos::callback::SystemTrayCallback;

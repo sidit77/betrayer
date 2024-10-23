@@ -13,14 +13,14 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{LazyLock, Once};
 
 pub use icon::NativeIcon;
+use windows_sys::core::{w, PCWSTR};
 use windows_sys::Win32::Foundation::{BOOL, HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
 use windows_sys::Win32::System::SystemServices::IMAGE_DOS_HEADER;
 use windows_sys::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, HWND_MESSAGE, RegisterClassW, RegisterWindowMessageW, WINDOW_EX_STYLE, WINDOW_STYLE, WM_COMMAND,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, RegisterClassW, RegisterWindowMessageW, HWND_MESSAGE, WINDOW_EX_STYLE, WINDOW_STYLE, WM_COMMAND,
     WM_DESTROY, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW
 };
-use windows_sys::core::{PCWSTR, w};
 
 use crate::error::{ErrorSource, TrayResult};
 use crate::platform::windows::menu::NativeMenu;

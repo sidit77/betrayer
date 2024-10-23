@@ -2,7 +2,7 @@ use std::fmt::{Debug, Formatter};
 use std::ptr::null_mut;
 use std::sync::Arc;
 
-use windows_sys::Win32::UI::WindowsAndMessaging::{CreateIcon, DestroyIcon, HICON, IMAGE_ICON, LR_DEFAULTSIZE, LoadImageW};
+use windows_sys::Win32::UI::WindowsAndMessaging::{CreateIcon, DestroyIcon, LoadImageW, HICON, IMAGE_ICON, LR_DEFAULTSIZE};
 
 use crate::error::TrayResult;
 use crate::platform::windows::{error_check, get_instance_handle};

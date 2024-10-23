@@ -4,8 +4,8 @@ use std::ptr::null_mut;
 
 use windows_sys::Win32::Foundation::HWND;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    AppendMenuW, CreatePopupMenu, DestroyMenu, GetCursorPos, HMENU, MF_CHECKED, MF_POPUP, MF_SEPARATOR, MF_STRING, SetForegroundWindow,
-    TPM_BOTTOMALIGN, TPM_LEFTALIGN, TrackPopupMenu
+    AppendMenuW, CreatePopupMenu, DestroyMenu, GetCursorPos, SetForegroundWindow, TrackPopupMenu, HMENU, MF_CHECKED, MF_POPUP, MF_SEPARATOR,
+    MF_STRING, TPM_BOTTOMALIGN, TPM_LEFTALIGN
 };
 
 use crate::error::{TrayError, TrayResult};

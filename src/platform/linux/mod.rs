@@ -9,7 +9,7 @@ use std::sync::{Arc, OnceLock};
 use flume::Sender;
 use parking_lot::Mutex;
 use png::{BitDepth, ColorType, Encoder};
-use zbus::{ConnectionBuilder, Task, proxy};
+use zbus::{proxy, ConnectionBuilder, Task};
 
 use crate::error::{ErrorSource, TrayResult};
 use crate::platform::linux::item::StatusNotifierItem;
