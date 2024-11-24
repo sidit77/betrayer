@@ -76,13 +76,10 @@ This library will spawn its own thread to handle DBus communication so no extra 
 ## Todo
 
 ### General
-- [ ] Support for changing icons
 - [ ] Standalone mode that takes control of the main thread
 - [ ] More menu elements
 - [ ] More options for the tray
 
-### Windows
-- [ ] Recreate the tray when the taskbar restarts
 
 ### Linux
 - [ ] Support creating the tray on existing async executors to avoid spawning the thread
