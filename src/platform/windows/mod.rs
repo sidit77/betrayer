@@ -18,8 +18,8 @@ use windows_sys::Win32::Foundation::{BOOL, HINSTANCE, HWND, LPARAM, LRESULT, WPA
 use windows_sys::Win32::System::SystemServices::IMAGE_DOS_HEADER;
 use windows_sys::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, RegisterClassW, RegisterWindowMessageW, HWND_MESSAGE, WINDOW_EX_STYLE, WINDOW_STYLE, WM_COMMAND,
-    WM_DESTROY, WM_LBUTTONDBLCLK, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW
+    CreateWindowExW, DefWindowProcW, DestroyWindow, RegisterClassW, RegisterWindowMessageW, WINDOW_STYLE, WM_COMMAND, WM_DESTROY, WM_LBUTTONDBLCLK,
+    WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT
 };
 
 use crate::error::{ErrorSource, TrayResult};
@@ -42,6 +42,7 @@ pub struct NativeTrayIcon<T> {
 }
 
 struct TrayLoopData {
+    tray_id: u32,
     shared: Rc<SharedTrayData>,
     #[allow(clippy::type_complexity)]
     callback: Box<dyn FnMut(TrayEvent<&dyn Any>) + 'static>
@@ -59,10 +60,9 @@ impl<T: Clone + 'static> NativeTrayIcon<T> {
         F: FnMut(TrayEvent<T>) + Send + 'static
     {
         let tray_id = GLOBAL_TRAY_COUNTER.fetch_add(1, Ordering::Relaxed);
-
         let hwnd = error_check(unsafe {
             CreateWindowExW(
-                WINDOW_EX_STYLE::default(),
+                WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_TOOLWINDOW,
                 get_class_name(),
                 null(),
                 WINDOW_STYLE::default(),
@@ -70,7 +70,7 @@ impl<T: Clone + 'static> NativeTrayIcon<T> {
                 0,
                 0,
                 0,
-                HWND_MESSAGE,
+                null_mut(),
                 null_mut(),
                 get_instance_handle(),
                 null()
@@ -89,6 +89,7 @@ impl<T: Clone + 'static> NativeTrayIcon<T> {
             .apply(hwnd, tray_id, DataAction::Add)?;
 
         let data = TrayLoopData {
+            tray_id,
             shared: shared.clone(),
             callback: Box::new(move |event: TrayEvent<&dyn Any>| {
                 let event = match event {
@@ -162,7 +163,13 @@ unsafe extern "system" fn tray_subclass_proc(hwnd: HWND, msg: u32, wparam: WPARA
             drop(Box::from_raw(subclass_input_ptr));
             log::trace!("Dropped message loop data");
         }
-        _ if msg == *S_U_TASKBAR_RESTART => log::debug!("Taskbar restarted"),
+        _ if msg == *S_U_TASKBAR_RESTART => {
+            log::trace!("Taskbar restarted. Re-adding tray icon");
+            TrayIconData::from(&subclass_input.shared)
+                .with_message(WM_USER_TRAY_ICON)
+                .apply(hwnd, subclass_input.tray_id, DataAction::Add)
+                .unwrap_or_else(|err| log::warn!("Failed to re-add tray icon: {err}"));
+        }
         WM_USER_TRAY_ICON => {
             if let Some(click) = ClickType::from_lparam(lparam) {
                 (subclass_input.callback)(TrayEvent::Tray(click));
