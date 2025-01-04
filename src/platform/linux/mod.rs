@@ -10,6 +10,7 @@ use flume::Sender;
 use parking_lot::Mutex;
 use png::{BitDepth, ColorType, Encoder};
 use zbus::{connection, proxy, Task};
+use zbus::export::futures_util::{StreamExt, TryStreamExt};
 
 use crate::error::{ErrorSource, TrayResult};
 use crate::platform::linux::item::StatusNotifierItem;
@@ -33,7 +34,8 @@ pub struct NativeTrayIcon<T> {
     sender: Sender<TrayUpdate<T>>,
     tmp_icon_file: Cell<Option<TmpFileRaiiHandle>>,
     tmp_icon_counter: Cell<u32>,
-    _update_task: Task<()>
+    _update_task: Task<()>,
+    _register_task: Task<Result<(), zbus::Error>>
 }
 
 impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
@@ -119,12 +121,32 @@ impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
 
         proxy.register_status_notifier_item(&name).await?;
 
+        let register_task = {
+            conn.executor().spawn(
+                async move {
+                    proxy.inner().receive_owner_changed().await?.then(|new_owner| {
+                        // TODO Hack?
+                        let proxy = proxy.clone();
+                        let name = name.clone();
+                        async move {
+                            match new_owner {
+                                Some(_) => proxy.register_status_notifier_item(&name).await,
+                                None => Ok(())
+                            }
+                        }
+                    }).try_collect::<()>().await
+                },
+                "statusnotifierwatcher watcher"
+            )
+        };
+
         Ok(Self {
             id: (pid, id),
             sender,
             tmp_icon_file: Cell::new(tmp_icon_path.flatten()),
             tmp_icon_counter: Cell::new(tmp_icon_counter),
-            _update_task: receiver_task
+            _update_task: receiver_task,
+            _register_task: register_task
         })
     }
 
