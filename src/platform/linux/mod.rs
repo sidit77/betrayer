@@ -125,9 +125,8 @@ impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
             conn.executor().spawn(
                 async move {
                     proxy.inner().receive_owner_changed().await?.then(|new_owner| {
-                        // TODO Hack?
-                        let proxy = proxy.clone();
-                        let name = name.clone();
+                        let proxy = &proxy;
+                        let name = &name;
                         async move {
                             match new_owner {
                                 Some(_) => proxy.register_status_notifier_item(&name).await,
