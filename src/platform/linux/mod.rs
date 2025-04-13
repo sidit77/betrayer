@@ -7,10 +7,10 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, OnceLock};
 
 use flume::Sender;
+use futures_util::{StreamExt, TryStreamExt};
 use parking_lot::Mutex;
 use png::{BitDepth, ColorType, Encoder};
 use zbus::{connection, proxy, Task};
-use zbus::export::futures_util::{StreamExt, TryStreamExt};
 
 use crate::error::{ErrorSource, TrayResult};
 use crate::platform::linux::item::StatusNotifierItem;
@@ -24,7 +24,7 @@ static COUNTER: AtomicU32 = AtomicU32::new(1);
 enum TrayUpdate<T> {
     Menu(Menu<T>),
     Tooltip(String),
-    Icon(String)
+    Icon(String),
 }
 
 pub type TrayCallback<T> = Arc<Mutex<dyn FnMut(TrayEvent<T>) + Send + 'static>>;
@@ -35,13 +35,13 @@ pub struct NativeTrayIcon<T> {
     tmp_icon_file: Cell<Option<TmpFileRaiiHandle>>,
     tmp_icon_counter: Cell<u32>,
     _update_task: Task<()>,
-    _register_task: Task<Result<(), zbus::Error>>
+    _register_task: Task<Result<(), zbus::Error>>,
 }
 
 impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
     pub async fn new_async<F>(builder: TrayIconBuilder<T>, callback: F) -> TrayResult<Self>
     where
-        F: FnMut(TrayEvent<T>) + Send + 'static
+        F: FnMut(TrayEvent<T>) + Send + 'static,
     {
         let pid = std::process::id();
         let id = COUNTER.fetch_add(1, Ordering::AcqRel);
@@ -60,7 +60,7 @@ impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
             .name(name.clone())?
             .serve_at(
                 ITEM_PATH,
-                StatusNotifierItem::new(icon.unwrap_or_default(), builder.tooltip.unwrap_or_default(), callback.clone())
+                StatusNotifierItem::new(icon.unwrap_or_default(), builder.tooltip.unwrap_or_default(), callback.clone()),
             )?
             .serve_at(MENU_PATH, DBusMenu::new(builder.menu.unwrap_or_else(Menu::empty), callback))?
             .internal_executor(true)
@@ -110,7 +110,7 @@ impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
                         }
                     }
                 },
-                "event receiver"
+                "event receiver",
             )
         };
 
@@ -124,18 +124,24 @@ impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
         let register_task = {
             conn.executor().spawn(
                 async move {
-                    proxy.inner().receive_owner_changed().await?.then(|new_owner| {
-                        let proxy = &proxy;
-                        let name = &name;
-                        async move {
-                            match new_owner {
-                                Some(_) => proxy.register_status_notifier_item(&name).await,
-                                None => Ok(())
+                    proxy
+                        .inner()
+                        .receive_owner_changed()
+                        .await?
+                        .then(|new_owner| {
+                            let proxy = &proxy;
+                            let name = &name;
+                            async move {
+                                match new_owner {
+                                    Some(_) => proxy.register_status_notifier_item(&name).await,
+                                    None => Ok(()),
+                                }
                             }
-                        }
-                    }).try_collect::<()>().await
+                        })
+                        .try_collect::<()>()
+                        .await
                 },
-                "statusnotifierwatcher watcher"
+                "statusnotifierwatcher watcher",
             )
         };
 
@@ -145,13 +151,13 @@ impl<T: Clone + Send + 'static> NativeTrayIcon<T> {
             tmp_icon_file: Cell::new(tmp_icon_path.flatten()),
             tmp_icon_counter: Cell::new(tmp_icon_counter),
             _update_task: receiver_task,
-            _register_task: register_task
+            _register_task: register_task,
         })
     }
 
     pub fn new<F>(builder: TrayIconBuilder<T>, callback: F) -> TrayResult<Self>
     where
-        F: FnMut(TrayEvent<T>) + Send + 'static
+        F: FnMut(TrayEvent<T>) + Send + 'static,
     {
         async_io::block_on(Self::new_async(builder, callback))
     }
@@ -216,7 +222,7 @@ trait StatusNotifierWatcher {
 pub enum NativeIcon {
     #[allow(dead_code)]
     Path(String),
-    Pixels(Vec<u8>)
+    Pixels(Vec<u8>),
 }
 
 impl NativeIcon {
