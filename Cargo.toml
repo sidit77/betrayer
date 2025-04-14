@@ -33,6 +33,7 @@ async-io = "2.3.4"
 parking_lot = "0.12.3"
 flume = "0.11.1"
 png = "0.17.14"
+futures-util = "0.3.31"
 
 [target."cfg(target_os = \"macos\")".dependencies]
 block2 = "0.5.1"
